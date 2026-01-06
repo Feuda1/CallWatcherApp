@@ -1,6 +1,6 @@
 {
     "name": "call-watcher",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "description": "Мониторинг звонков и создание заявок для clients.denvic.ru",
     "main": "main.js",
     "scripts": {
@@ -23,7 +23,23 @@
         "nsis": {
             "oneClick": false,
             "perMachine": true,
-            "allowToChangeInstallationDirectory": true
-        }
+            "allowToChangeInstallationDirectory": true,
+            "deleteAppDataOnUninstall": true
+        },
+        "publish": [
+            {
+                "provider": "github",
+                "owner": "Feuda1",
+                "repo": "CallWatcherApp"
+            }
+        ]
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/Feuda1/CallWatcherApp.git"
+    },
+    "dependencies": {
+        "electron-log": "^5.4.3",
+        "electron-updater": "^6.7.3"
     }
 }

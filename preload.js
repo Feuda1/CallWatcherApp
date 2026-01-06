@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('api', {
     skipCall: (id) => ipcRenderer.send('skip-call', id),
     ticketCreated: (callId) => ipcRenderer.send('ticket-created', callId),
     openLogin: () => ipcRenderer.send('open-login'),
+    logout: () => ipcRenderer.send('logout'),
 
 
     getAudio: (url) => ipcRenderer.invoke('get-audio', url),
@@ -31,5 +32,12 @@ contextBridge.exposeInMainWorld('api', {
 
     onCallData: (callback) => ipcRenderer.on('call-data', (event, data) => callback(data)),
     onCallHistory: (callback) => ipcRenderer.on('call-history', (event, data) => callback(data)),
-    onLoginStatus: (callback) => ipcRenderer.on('login-status', (event, status) => callback(status))
+    onLoginStatus: (callback) => ipcRenderer.on('login-status', (event, status) => callback(status)),
+
+    getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+    onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (event, info) => callback(info)),
+    onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', (event, info) => callback(info)),
+    onUpdateError: (callback) => ipcRenderer.on('update-error', (event, err) => callback(err)),
+    onBulkProgress: (callback) => ipcRenderer.on('bulk-progress', (event, count) => callback(count)),
+    restartApp: () => ipcRenderer.send('restart_app')
 });

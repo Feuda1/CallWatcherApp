@@ -24,7 +24,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnSkip = document.getElementById('btn-skip');
     const btnLogin = document.getElementById('btn-login');
     const btnLoginHeader = document.getElementById('btn-login-header');
+    const btnLogoutHeader = document.getElementById('btn-logout-header');
     const statusIndicator = document.getElementById('status-indicator');
+    const appVersionEl = document.getElementById('app-version');
 
     const audioPlayerContainer = document.getElementById('audio-player-container');
     const callAudio = document.getElementById('call-audio');
@@ -132,17 +134,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    async function enterBulkMode() {
+    async function enterBulkMode(forceRefresh = false) {
         bulkStatsEl?.classList.remove('hidden');
         bulkNavEl?.classList.remove('hidden');
 
 
-        bulkCalls = await window.api.getAllCalls(true);
-
-        const unfilledCalls = bulkCalls.filter(c => !c.hasTicket);
-        bulkCalls = unfilledCalls;
-        bulkIndex = 0;
-
+        if (forceRefresh || bulkCalls.length === 0) {
+            bulkCalls = await window.api.getAllCalls(forceRefresh);
+            const unfilledCalls = bulkCalls.filter(c => !c.hasTicket);
+            bulkCalls = unfilledCalls;
+            bulkIndex = 0;
+        }
 
         const stats = await window.api.getBulkStats();
         bulkStats = stats;
@@ -172,6 +174,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (statUnfilled) statUnfilled.textContent = bulkStats.unfilled;
     }
 
+    if (window.api.onBulkProgress) {
+        window.api.onBulkProgress((count) => {
+            if (statTotal) statTotal.textContent = count;
+        });
+    }
+
     function updateBulkPosition() {
         if (bulkPositionEl) {
             bulkPositionEl.textContent = `${bulkIndex + 1} из ${bulkCalls.length}`;
@@ -199,13 +207,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnRefreshBulk?.addEventListener('click', async () => {
         btnRefreshBulk.classList.add('loading');
-        await enterBulkMode();
+        await enterBulkMode(true);
         btnRefreshBulk.classList.remove('loading');
     });
 
     function openLogin() { window.api.openLogin(); }
     if (btnLogin) btnLogin.addEventListener('click', openLogin);
     if (btnLoginHeader) btnLoginHeader.addEventListener('click', openLogin);
+    if (btnLogoutHeader) btnLogoutHeader.addEventListener('click', () => {
+        if (confirm('Выйти из системы?')) {
+            window.api.logout();
+        }
+    });
 
     window.api.onLoginStatus((isLoggedIn) => {
         if (isLoggedIn) {
@@ -214,6 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
             statusIndicator.title = 'Авторизован';
 
             if (btnLoginHeader) btnLoginHeader.style.display = 'none';
+            if (btnLogoutHeader) btnLogoutHeader.style.display = 'inline-flex';
             if (btnLogin) btnLogin.style.display = 'none';
         } else {
             statusIndicator.classList.remove('online');
@@ -221,6 +235,8 @@ document.addEventListener('DOMContentLoaded', () => {
             statusIndicator.title = 'Не авторизован';
 
             if (btnLoginHeader) btnLoginHeader.style.display = 'none';
+            if (btnLogoutHeader) btnLogoutHeader.style.display = 'none';
+
             if (btnLogin) {
                 btnLogin.style.display = 'inline-flex';
                 btnLogin.innerHTML = 'Войти в систему';
@@ -797,6 +813,44 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     loadTopics();
 
+    loadTopics();
+
+    async function initVersion() {
+        if (appVersionEl) {
+            const version = await window.api.getAppVersion();
+            appVersionEl.textContent = `v${version}`;
+        }
+    }
+    initVersion();
+
+    window.api.onUpdateAvailable((info) => {
+        console.log('Update available:', info);
+        if (appVersionEl) appVersionEl.textContent = `Обновление... v${info.version}`;
+    });
+
+    window.api.onUpdateDownloaded((info) => {
+        console.log('Update downloaded:', info);
+        if (appVersionEl) {
+            appVersionEl.textContent = `Перезапуск для v${info.version}`;
+            appVersionEl.style.cursor = 'pointer';
+            appVersionEl.style.color = '#4caf50';
+            appVersionEl.onclick = () => window.api.restartApp();
+        }
+    });
+
+    window.api.onUpdateError((err) => {
+        console.error('Update error:', err);
+        if (appVersionEl) {
+            const originalText = appVersionEl.textContent;
+
+            appVersionEl.textContent = `Обновлений не найдено`;
+
+            setTimeout(() => {
+                initVersion();
+            }, 10000);
+        }
+    });
+
     btnCreate.addEventListener('click', async () => {
         if (!selectedClientId) return;
 
@@ -813,6 +867,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btnCreate.textContent = 'Создание...';
 
         const result = await window.api.createTicket({
+            callData: currentCallData,
             clientId: selectedClientId,
             subject: subject,
             description: description,
@@ -825,11 +880,60 @@ document.addEventListener('DOMContentLoaded', () => {
         btnCreate.textContent = 'Создать заявку';
 
         if (result.IsValid) {
-
+            // Success logic
         } else {
             alert('Ошибка создания заявки: ' + (result.Error || 'Неизвестная ошибка'));
         }
     });
+
+    // Custom Topics UI
+    const topicsContainer = document.createElement('div');
+    topicsContainer.className = 'custom-topics-dropdown hidden';
+    ticketSubject.parentNode.appendChild(topicsContainer);
+
+    ticketSubject.addEventListener('focus', () => {
+        if (topicsList.length > 0) showTopics(topicsList);
+    });
+
+    ticketSubject.addEventListener('input', () => {
+        const val = ticketSubject.value.toLowerCase();
+        const filtered = topicsList.filter(t => t.toLowerCase().includes(val));
+        if (filtered.length > 0) showTopics(filtered);
+        else topicsContainer.classList.add('hidden');
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!ticketSubject.contains(e.target) && !topicsContainer.contains(e.target)) {
+            topicsContainer.classList.add('hidden');
+        }
+    });
+
+    function showTopics(list) {
+        topicsContainer.innerHTML = '';
+        list.forEach(topic => {
+            const div = document.createElement('div');
+            div.className = 'topic-item';
+            div.textContent = topic;
+            div.addEventListener('click', () => {
+                ticketSubject.value = topic;
+                topicsContainer.classList.add('hidden');
+            });
+            topicsContainer.appendChild(div);
+        });
+        topicsContainer.classList.remove('hidden');
+    }
+
+    let topicsList = [];
+    async function initTopics() {
+        try {
+            topicsList = await window.api.getTopics();
+        } catch (e) { console.error(e); }
+    }
+    initTopics();
+
+    async function loadTopics() {
+        initTopics();
+    }
 
 
     window.api.onCallData(showCallData);

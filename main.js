@@ -1,6 +1,12 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, session, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { autoUpdater } = require('electron-updater');
+
+autoUpdater.logger = require('electron-log');
+autoUpdater.logger.transports.file.level = 'info';
+autoUpdater.verifyRowSignatures = false;
+autoUpdater.forceDevUpdateConfig = false;
 
 
 let mainWindow = null;
@@ -102,6 +108,27 @@ function saveAssociations() {
     } catch (e) {
         console.error('[CallWatcher] Ошибка сохранения ассоциаций:', e);
     }
+}
+
+function getAuthStatePath() {
+    return path.join(app.getPath('userData'), 'auth_state.json');
+}
+
+function loadAuthState() {
+    try {
+        const p = getAuthStatePath();
+        if (fs.existsSync(p)) {
+            const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+            isLoggedIn = !!data.isLoggedIn;
+            console.log('[CallWatcher] Загружен статус авторизации:', isLoggedIn);
+        }
+    } catch (e) { console.error('Ошибка загрузки статуса:', e); }
+}
+
+function saveAuthState(status) {
+    try {
+        fs.writeFileSync(getAuthStatePath(), JSON.stringify({ isLoggedIn: status }));
+    } catch (e) { console.error('Ошибка сохранения статуса:', e); }
 }
 
 function createMainWindow() {
@@ -238,28 +265,87 @@ function createTray() {
 async function checkCalls() {
     try {
         const ses = session.defaultSession;
+
+        const authCheckUrl = 'https://clients.denvic.ru/Tickets';
+        const authResponse = await ses.fetch(authCheckUrl, { credentials: 'include' });
+        const authHtml = await authResponse.text();
+
+        const hasPasswordField = authHtml.includes('Password');
+        const hasLoginKeyword = authHtml.includes('Войти') || authHtml.includes('login');
+        console.log('[CallWatcher] Проверка: Password:', hasPasswordField, ', Login:', hasLoginKeyword);
+
+        const isLoginPage = authHtml.includes('Password') ||
+            authHtml.includes('Войти') ||
+            authHtml.includes('Log in') ||
+            authHtml.includes('Remember me');
+
+        if (isLoginPage) {
+            console.log('[CallWatcher] Проверка авторизации: обнаружена страница входа -> Не авторизован');
+            if (isLoggedIn) {
+                isLoggedIn = false;
+                saveAuthState(false);
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('login-status', false);
+                }
+            } else {
+                if (isFirstPoll && mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('login-status', false);
+                }
+            }
+
+            if (!loginWindow || loginWindow.isDestroyed()) {
+                openLoginWindow();
+            }
+            return;
+        }
+
         const response = await ses.fetch(PHONE_CALLS_URL, {
             credentials: 'include'
         });
 
         if (!response.ok || response.url.includes('Login')) {
             console.log('[CallWatcher] Не авторизован');
-            isLoggedIn = false;
-            if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send('login-status', false);
+            if (isLoggedIn) {
+                isLoggedIn = false;
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('login-status', false);
+                }
+            } else {
+
+                if (isFirstPoll && mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('login-status', false);
+                }
+            }
+            return;
+        }
+
+        const html = await response.text();
+
+        if (html.includes('id="Input_Password"') || html.includes('name="Input.Password"') || html.includes('Вход в систему')) {
+            console.log('[CallWatcher] Обнаружена форма входа, считаем что не авторизован');
+            if (isLoggedIn) {
+                isLoggedIn = false;
+                saveAuthState(false);
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('login-status', false);
+                }
+            } else {
+                if (isFirstPoll && mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('login-status', false);
+                }
             }
             return;
         }
 
         if (!isLoggedIn) {
             isLoggedIn = true;
+            saveAuthState(true);
             console.log('[CallWatcher] Успешная авторизация');
             if (mainWindow && !mainWindow.isDestroyed()) {
                 mainWindow.webContents.send('login-status', true);
             }
         }
 
-        const html = await response.text();
         const callData = parseCallData(html);
 
         if (callData) {
@@ -403,40 +489,40 @@ async function fetchAllCalls(forceRefresh = false) {
 
     const ses = session.defaultSession;
     const allCalls = [];
-    let currentPage = 1;
-    let maxPages = 1;
+    let page = 1;
+    const MAX_PAGES_SAFETY = 50;
+    let hasMore = true;
 
     try {
-
-        const firstUrl = `https://clients.denvic.ru/PhoneCalls?onlyMy=true&page=1`;
-        const firstResponse = await ses.fetch(firstUrl, { credentials: 'include' });
-
-        if (!firstResponse.ok || firstResponse.url.includes('Login')) {
-            console.log('[CallWatcher] Bulk: Not logged in');
-            return [];
-        }
-
-        const firstHtml = await firstResponse.text();
-
-        const pageRegex = /page=(\d+)/g;
-        let pageMatch;
-        while ((pageMatch = pageRegex.exec(firstHtml)) !== null) {
-            const pageNum = parseInt(pageMatch[1], 10);
-            if (pageNum > maxPages) maxPages = pageNum;
-        }
-
-        console.log(`[CallWatcher] Bulk: Found ${maxPages} pages`);
-
-        const firstPageCalls = parseAllCallsFromPage(firstHtml);
-        allCalls.push(...firstPageCalls);
-
-        for (let page = 2; page <= maxPages; page++) {
+        while (hasMore && page <= MAX_PAGES_SAFETY) {
             const url = `https://clients.denvic.ru/PhoneCalls?onlyMy=true&page=${page}`;
+            console.log(`[CallWatcher] Bulk: Fetching page ${page}...`);
+
             const response = await ses.fetch(url, { credentials: 'include' });
-            if (response.ok) {
-                const html = await response.text();
-                const pageCalls = parseAllCallsFromPage(html);
-                allCalls.push(...pageCalls);
+
+            if (!response.ok || response.url.includes('Login')) {
+                console.log('[CallWatcher] Bulk: Not logged in or error');
+                if (page === 1) return [];
+                break;
+            }
+
+            const html = await response.text();
+            const pageCalls = parseAllCallsFromPage(html);
+
+            if (pageCalls.length === 0) {
+                console.log(`[CallWatcher] Bulk: Page ${page} is empty, stopping.`);
+                hasMore = false;
+            } else {
+
+                const newCalls = pageCalls.filter(nc => !allCalls.find(ac => ac.id === nc.id));
+                allCalls.push(...newCalls);
+                console.log(`[CallWatcher] Bulk: Added ${newCalls.length} calls from page ${page}`);
+
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                    mainWindow.webContents.send('bulk-progress', allCalls.length);
+                }
+
+                page++;
             }
         }
 
@@ -510,6 +596,67 @@ function parseAllCallsFromPage(html) {
     return calls;
 }
 
+async function restoreHistoryFromServer() {
+    console.log('[CallWatcher] Начало восстановления истории с сервера...');
+    try {
+        const serverCalls = await fetchAllCalls(true);
+        let addedCount = 0;
+
+
+        for (const call of serverCalls) {
+            const exists = callHistory.find(c => c.id === call.id);
+
+            if (!exists) {
+                let status = 'unprocessed';
+                if (call.hasTicket) status = 'created';
+
+                callHistory.push({
+                    ...call,
+                    status: status,
+                    addedAt: new Date().toLocaleString('ru-RU')
+                });
+                addedCount++;
+            }
+        }
+
+        if (addedCount > 0) {
+            const uniqueMap = new Map();
+            callHistory.forEach(c => uniqueMap.set(c.id, c));
+
+            callHistory = Array.from(uniqueMap.values());
+
+            callHistory.sort((a, b) => {
+                const parseDate = (d) => {
+                    if (!d) return 0;
+                    const [datePart, timePart] = d.split(' ');
+                    const [day, month, year] = datePart.split('.');
+                    return new Date(`${year}-${month}-${day}T${timePart}`).getTime();
+                };
+                return parseDate(b.date) - parseDate(a.date);
+            });
+
+            if (callHistory.length > 100) callHistory = callHistory.slice(0, 100);
+
+            console.log(`[CallWatcher] Восстановлено ${addedCount} звонков. Всего в истории: ${callHistory.length}`);
+            saveHistory();
+
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('call-history', callHistory);
+            }
+        } else {
+            console.log('[CallWatcher] Новых звонков для восстановления не найдено.');
+        }
+
+        callHistory.forEach(c => {
+            if (c.id) shownCallIds.add(c.id);
+        });
+        console.log('[CallWatcher] Обновлен список показанных звонков:', shownCallIds.size);
+
+    } catch (e) {
+        console.error('[CallWatcher] Ошибка восстановления истории:', e);
+    }
+}
+
 function startPolling() {
     if (isPolling) return;
     isPolling = true;
@@ -554,6 +701,18 @@ function openLoginWindow() {
 
     loginWindow.webContents.on('did-navigate', (event, url) => {
         console.log('[CallWatcher] Вход переход на:', url);
+        if (url.includes('/Tickets')) {
+            console.log('[CallWatcher] Обнаружен успешный вход (переход на Tickets)');
+            isLoggedIn = true;
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('login-status', true);
+            }
+            if (loginWindow && !loginWindow.isDestroyed()) {
+                loginWindow.close();
+            }
+
+            restoreHistoryFromServer();
+        }
     });
 
     loginWindow.on('closed', () => {
@@ -607,6 +766,61 @@ ipcMain.handle('get-bulk-stats', async () => {
     const unfilled = total - filled;
     return { total, filled, unfilled };
 });
+
+ipcMain.handle('get-app-version', () => {
+    return app.getVersion();
+});
+
+autoUpdater.on('working-directory', (info) => {
+    console.log('[Updater] Working directory:', info);
+});
+
+autoUpdater.on('update-available', (info) => {
+    console.log('[Updater] Доступно обновление:', info);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-available', info);
+    }
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+    console.log('[Updater] Обновление загружено:', info);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-downloaded', info);
+    }
+});
+
+autoUpdater.on('error', (err) => {
+    console.error('[Updater] Ошибка:', err);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-error', err.message);
+    }
+});
+
+ipcMain.on('restart_app', () => {
+    autoUpdater.quitAndInstall();
+});
+
+ipcMain.on('open-login', () => {
+    openLoginWindow();
+});
+
+ipcMain.on('logout', async () => {
+    console.log('[CallWatcher] Выход из системы...');
+    isLoggedIn = false;
+    try {
+        await session.defaultSession.clearStorageData({ storages: ['cookies', 'localstorage'] });
+        console.log('[CallWatcher] Данные сессии очищены');
+    } catch (e) {
+        console.error('[CallWatcher] Ошибка очистки данных:', e);
+    }
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('login-status', false);
+    }
+
+    setTimeout(checkCalls, 1000);
+});
+
 
 ipcMain.on('lock-call', (event, callId) => {
     isCallLocked = true;
@@ -898,9 +1112,14 @@ app.whenReady().then(() => {
     loadHistory();
     loadAssociations();
     loadTopics();
+    loadAuthState();
     createMainWindow();
     createTray();
     startPolling();
+
+    if (app.isPackaged) {
+        autoUpdater.checkForUpdatesAndNotify();
+    }
 });
 
 app.on('window-all-closed', () => {

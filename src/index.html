@@ -21,8 +21,6 @@
                 </div>
                 <div class="connection-status" title="Статус подключения">
                     <div id="status-indicator" class="status-dot offline"></div>
-
-                    <button id="btn-login-header" class="btn-icon-small" title="Войти">🔐</button>
                 </div>
             </div>
 
@@ -56,11 +54,10 @@
                 <div id="history-empty" class="history-empty">Нет звонков</div>
             </div>
 
-            <div class="sidebar-footer">
-                <button id="btn-clear-history" class="btn-text-danger" title="Очистить историю">
-                    🗑 Очистить историю
-                </button>
-            </div>
+            <button id="btn-clear-history" class="btn-text-danger" title="Очистить историю">
+                🗑 Очистить историю
+            </button>
+            <div id="app-version" class="app-version">v...</div>
         </aside>
 
 
@@ -179,8 +176,7 @@
                                 <div class="form-group">
                                     <label>Тема обращения</label>
                                     <input type="text" id="ticket-subject" class="modern-input"
-                                        placeholder="Например: Не работает касса" list="topic-list">
-                                    <datalist id="topic-list"></datalist>
+                                        placeholder="Например: Не работает касса">
                                 </div>
                                 <div class="form-group flex-grow">
                                     <label>Описание проблемы</label>
