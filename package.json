@@ -1,6 +1,6 @@
 {
     "name": "call-watcher",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "description": "Мониторинг звонков и создание заявок для clients.denvic.ru",
     "main": "main.js",
     "scripts": {
@@ -16,6 +16,7 @@
     "build": {
         "appId": "ru.denvic.callwatcher",
         "productName": "Call Watcher",
+        "artifactName": "CallWatcher-Setup-${version}.${ext}",
         "win": {
             "target": "nsis",
             "icon": "assets/icon.png"

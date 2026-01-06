@@ -771,6 +771,21 @@ ipcMain.handle('get-app-version', () => {
     return app.getVersion();
 });
 
+autoUpdater.on('checking-for-update', () => {
+    console.log('[Updater] Проверка обновлений...');
+});
+
+autoUpdater.on('update-not-available', (info) => {
+    console.log('[Updater] Обновления не найдены. Текущая версия актуальна:', info);
+});
+
+autoUpdater.on('download-progress', (progressObj) => {
+    let log_message = '[Updater] Скорость: ' + progressObj.bytesPerSecond;
+    log_message = log_message + ' - Загружено ' + progressObj.percent + '%';
+    log_message = log_message + ' (' + progressObj.transferred + '/' + progressObj.total + ')';
+    console.log(log_message);
+});
+
 autoUpdater.on('working-directory', (info) => {
     console.log('[Updater] Working directory:', info);
 });
@@ -783,10 +798,11 @@ autoUpdater.on('update-available', (info) => {
 });
 
 autoUpdater.on('update-downloaded', (info) => {
-    console.log('[Updater] Обновление загружено:', info);
+    console.log('[Updater] Обновление загружено, перезапуск...');
     if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('update-downloaded', info);
     }
+    autoUpdater.quitAndInstall(true, true);
 });
 
 autoUpdater.on('error', (err) => {
