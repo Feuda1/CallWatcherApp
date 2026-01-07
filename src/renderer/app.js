@@ -28,6 +28,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusIndicator = document.getElementById('status-indicator');
     const appVersionEl = document.getElementById('app-version');
 
+    const btnMinimize = document.getElementById('btn-minimize');
+    const btnMaximize = document.getElementById('btn-maximize');
+    const btnClose = document.getElementById('btn-close');
+
+    if (btnMinimize) btnMinimize.addEventListener('click', () => window.api.minimizeWindow());
+    if (btnMaximize) btnMaximize.addEventListener('click', () => window.api.maximizeWindow());
+    if (btnClose) btnClose.addEventListener('click', () => window.api.closeWindow());
+
     const audioPlayerContainer = document.getElementById('audio-player-container');
     const callAudio = document.getElementById('call-audio');
     const speedButtons = document.querySelectorAll('.btn-speed');
@@ -105,6 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let bulkCalls = [];
     let bulkIndex = 0;
     let bulkStats = { total: 0, filled: 0, unfilled: 0 };
+    let bulkFirstLoad = true;
 
     const modeTabs = document.querySelectorAll('.mode-tab');
     const bulkStatsEl = document.getElementById('bulk-stats');
@@ -134,15 +143,74 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    let minDuration = 0;
+    let allBulkCalls = [];
+
+    const presetBtns = document.querySelectorAll('.preset-btn');
+    const durationValueEl = document.getElementById('duration-value');
+    const durationSlider = document.getElementById('duration-slider');
+
+    function updateDuration(value) {
+        minDuration = parseInt(value);
+        if (durationSlider) durationSlider.value = minDuration;
+        if (durationValueEl) durationValueEl.textContent = minDuration + ' сек';
+
+        presetBtns.forEach(btn => {
+            if (parseInt(btn.dataset.value) === minDuration) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        applyDurationFilter();
+    }
+
+    if (durationSlider) {
+        durationSlider.addEventListener('input', (e) => {
+            updateDuration(e.target.value);
+        });
+    }
+
+    presetBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            updateDuration(btn.dataset.value);
+        });
+    });
+
+    function applyDurationFilter() {
+        bulkCalls = allBulkCalls.filter(c => {
+            const dur = parseInt(c.duration) || 0;
+            return dur >= minDuration;
+        });
+        bulkIndex = 0;
+        updateBulkPosition();
+        if (bulkCalls.length > 0) {
+            showCallData(bulkCalls[0]);
+        } else {
+            showCallData(null);
+        }
+    }
+
+    const bulkFilterEl = document.getElementById('duration-filter-container');
+
     async function enterBulkMode(forceRefresh = false) {
         bulkStatsEl?.classList.remove('hidden');
         bulkNavEl?.classList.remove('hidden');
+        bulkFilterEl?.classList.remove('hidden');
 
+        const needsRefresh = forceRefresh || bulkFirstLoad;
+        if (needsRefresh) {
+            bulkFirstLoad = false;
+        }
 
-        if (forceRefresh || bulkCalls.length === 0) {
-            bulkCalls = await window.api.getAllCalls(forceRefresh);
-            const unfilledCalls = bulkCalls.filter(c => !c.hasTicket);
-            bulkCalls = unfilledCalls;
+        if (needsRefresh || allBulkCalls.length === 0) {
+            const allCalls = await window.api.getAllCalls(needsRefresh);
+            allBulkCalls = allCalls.filter(c => !c.hasTicket);
+            bulkCalls = allBulkCalls.filter(c => {
+                const dur = parseInt(c.duration) || 0;
+                return dur >= minDuration;
+            });
             bulkIndex = 0;
         }
 
@@ -162,6 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function exitBulkMode() {
         bulkStatsEl?.classList.add('hidden');
         bulkNavEl?.classList.add('hidden');
+        bulkFilterEl?.classList.add('hidden');
         currentMode = 'incoming';
 
 
@@ -220,11 +289,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    const statusText = document.querySelector('.status-text');
+
     window.api.onLoginStatus((isLoggedIn) => {
         if (isLoggedIn) {
             statusIndicator.classList.remove('offline');
             statusIndicator.classList.add('online');
             statusIndicator.title = 'Авторизован';
+            if (statusText) statusText.textContent = 'Подключено';
 
             if (btnLoginHeader) btnLoginHeader.style.display = 'none';
             if (btnLogoutHeader) btnLogoutHeader.style.display = 'inline-flex';
@@ -233,6 +305,7 @@ document.addEventListener('DOMContentLoaded', () => {
             statusIndicator.classList.remove('online');
             statusIndicator.classList.add('offline');
             statusIndicator.title = 'Не авторизован';
+            if (statusText) statusText.textContent = 'Не подключено';
 
             if (btnLoginHeader) btnLoginHeader.style.display = 'none';
             if (btnLogoutHeader) btnLogoutHeader.style.display = 'none';
@@ -244,25 +317,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-
-    async function loadTopics() {
-        if (!topicList) return;
-        try {
-            const topics = await window.api.getTopics();
-            topicList.innerHTML = '';
-            if (topics && topics.length > 0) {
-                topics.forEach(topic => {
-                    const option = document.createElement('option');
-                    option.value = topic;
-                    topicList.appendChild(option);
-                });
-            }
-        } catch (err) {
-            console.error('Ошибка загрузки тем:', err);
-        }
-    }
-
-    loadTopics();
 
     async function showCallData(data) {
         const isNewCall = !currentCallData || (data && currentCallData.id !== data.id);
@@ -287,6 +341,22 @@ document.addEventListener('DOMContentLoaded', () => {
             callPhone.textContent = data.phone || 'Неизвестный';
             callDate.textContent = data.date || '';
             callDuration.textContent = (data.duration || '?') + ' сек';
+
+            const callStatusBadge = document.getElementById('call-status-badge');
+            if (callStatusBadge) {
+                callStatusBadge.className = 'call-status-badge';
+                const status = data.status || 'unprocessed';
+                if (status === 'created') {
+                    callStatusBadge.textContent = 'Создан';
+                    callStatusBadge.classList.add('status-created');
+                } else if (status === 'skipped') {
+                    callStatusBadge.textContent = 'Пропущен';
+                    callStatusBadge.classList.add('status-skipped');
+                } else {
+                    callStatusBadge.textContent = 'Ожидает';
+                    callStatusBadge.classList.add('status-waiting');
+                }
+            }
 
             const playBtnWrapper = document.querySelector('.play-btn-wrapper');
 
@@ -337,32 +407,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let finalSuggestions = [];
 
-            if (finalSuggestions.length === 0 && data.suggestions && data.suggestions.length > 0) {
-                console.log('Обогащение HTML предложений через ID lookup...');
-
+            if (data.suggestions && data.suggestions.length > 0) {
                 const allSuggestions = data.suggestions;
 
-                const limitEnrich = 10;
-                const toEnrich = allSuggestions.slice(0, limitEnrich);
-                const rest = allSuggestions.slice(limitEnrich);
-
-                const enrichmentPromises = toEnrich.map(async (s) => {
-                    try {
-                        const results = await window.api.searchClients(s.id);
-                        if (results && results.length > 0) {
-                            return { ...results[0], _originalName: s.name };
-                        }
-                    } catch (e) { }
-                    return { Id: s.id, _originalName: s.name, Organization: '', FirsName: s.name, LastName: '', Mail: '' };
-                });
-
-                const enriched = await Promise.all(enrichmentPromises);
-
-                const restMapped = rest.map(s => ({
-                    Id: s.id, _originalName: s.name, Organization: '', FirsName: s.name, LastName: '', Mail: ''
+                finalSuggestions = allSuggestions.map(s => ({
+                    Id: s.id,
+                    _originalName: s.name,
+                    Organization: '',
+                    FirsName: s.name,
+                    LastName: '',
+                    Mail: ''
                 }));
-
-                finalSuggestions = enriched.concat(restMapped);
             }
 
             if (data.associatedClient) {
@@ -417,7 +472,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         btnCreate.disabled = true;
                     }
-                } else if (data.associatedClient) {
                 } else if (data.associatedClient) {
                     selectedClientId = data.associatedClient.clientId;
                     selectedClientObject = finalSuggestions.find(s => (s.Id || s.id) === selectedClientId);
@@ -593,19 +647,25 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
 
-        Object.keys(groups).sort().forEach(groupName => {
+        const sortedGroups = Object.keys(groups).sort((a, b) => {
+            if (a === 'Без договора') return 1;
+            if (b === 'Без договора') return -1;
+            return a.localeCompare(b);
+        });
+
+        sortedGroups.forEach(groupName => {
             const header = document.createElement('li');
             header.className = 'group-header';
-            header.innerHTML = `< span > ${escapeHtml(groupName)}</span > <span>${groups[groupName].length}</span>`;
+            header.innerHTML = `<span>${escapeHtml(groupName)}</span> <span>${groups[groupName].length}</span>`;
             container.appendChild(header);
 
             groups[groupName].forEach(c => {
                 const li = document.createElement('li');
                 li.className = 'client-item indented';
                 li.innerHTML = `
-            < div class="client-name" > ${escapeHtml(c._displayName)}</div >
-                <div class="client-meta">${escapeHtml(c._displayMeta)}</div>
-        `;
+                    <div class="client-name">${escapeHtml(c._displayName)}</div>
+                    <div class="client-meta">${escapeHtml(c._displayMeta)}</div>
+                `;
                 li.dataset.id = c.Id || c.id;
                 li.addEventListener('click', () => selectClient(c, li));
                 container.appendChild(li);
@@ -657,8 +717,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 btnCreate.textContent = '✓ Создано!';
                 btnCreate.classList.add('btn-success');
 
-                btnCreate.classList.add('btn-success');
-
                 const subjectValue = ticketSubject.value.trim();
                 if (subjectValue) {
                     window.api.saveTopic(subjectValue).then(() => loadTopics());
@@ -670,8 +728,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     showCallData(null);
                     window.api.ticketCreated(completedCallId);
                     btnCreate.textContent = 'Создать заявку';
-                    btnCreate.disabled = true;
-
                     btnCreate.disabled = true;
 
                     if (currentMode === 'bulk') {
@@ -813,8 +869,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     loadTopics();
 
-    loadTopics();
-
     async function initVersion() {
         if (appVersionEl) {
             const version = await window.api.getAppVersion();
@@ -851,42 +905,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    btnCreate.addEventListener('click', async () => {
-        if (!selectedClientId) return;
-
-        const subject = ticketSubject.value.trim();
-        const description = ticketDesc.value.trim();
-
-        if (subject) {
-            window.api.saveTopic(subject).then(isNew => {
-                if (isNew) loadTopics();
-            });
-        }
-
-        btnCreate.disabled = true;
-        btnCreate.textContent = 'Создание...';
-
-        const result = await window.api.createTicket({
-            callData: currentCallData,
-            clientId: selectedClientId,
-            subject: subject,
-            description: description,
-            phone: currentCallData.phone,
-            callId: currentCallData.id,
-            associatedClient: currentCallData.associatedClient
-        });
-
-        btnCreate.disabled = false;
-        btnCreate.textContent = 'Создать заявку';
-
-        if (result.IsValid) {
-            // Success logic
-        } else {
-            alert('Ошибка создания заявки: ' + (result.Error || 'Неизвестная ошибка'));
-        }
-    });
-
-    // Custom Topics UI
     const topicsContainer = document.createElement('div');
     topicsContainer.className = 'custom-topics-dropdown hidden';
     ticketSubject.parentNode.appendChild(topicsContainer);
@@ -931,15 +949,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     initTopics();
 
-    async function loadTopics() {
-        initTopics();
-    }
-
-
     window.api.onCallData(showCallData);
     window.api.onCallHistory(() => loadHistory());
     window.api.getCallData().then(showCallData);
     loadHistory();
+
+    window.api.getAllCalls(true).then(calls => {
+        allBulkCalls = calls.filter(c => !c.hasTicket);
+        bulkCalls = allBulkCalls.filter(c => {
+            const dur = parseInt(c.duration) || 0;
+            return dur >= minDuration;
+        });
+        bulkFirstLoad = false;
+        console.log('Предзагружено звонков:', calls.length);
+    });
 
     function escapeHtml(text) {
         const div = document.createElement('div');

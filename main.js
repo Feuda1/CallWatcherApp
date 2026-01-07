@@ -137,7 +137,7 @@ function createMainWindow() {
         height: 700,
         minWidth: 600,
         minHeight: 500,
-        frame: true,
+        frame: false,
         autoHideMenuBar: true,
         resizable: true,
         show: false,
@@ -155,6 +155,7 @@ function createMainWindow() {
 
     mainWindow.on('ready-to-show', () => {
         mainWindow.show();
+        mainWindow.webContents.send('login-status', isLoggedIn);
     });
 
     mainWindow.on('close', (event) => {
@@ -479,11 +480,11 @@ function parseCallData(html) {
 
 let bulkCallsCache = [];
 let bulkLastFetched = 0;
-const BULK_CACHE_TTL = 60000;
+let bulkInitialLoadDone = false;
 
 async function fetchAllCalls(forceRefresh = false) {
 
-    if (!forceRefresh && bulkCallsCache.length > 0 && Date.now() - bulkLastFetched < BULK_CACHE_TTL) {
+    if (!forceRefresh && bulkCallsCache.length > 0) {
         return bulkCallsCache;
     }
 
@@ -814,6 +815,28 @@ autoUpdater.on('error', (err) => {
 
 ipcMain.on('restart_app', () => {
     autoUpdater.quitAndInstall();
+});
+
+ipcMain.on('window-minimize', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.minimize();
+    }
+});
+
+ipcMain.on('window-maximize', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMaximized()) {
+            mainWindow.unmaximize();
+        } else {
+            mainWindow.maximize();
+        }
+    }
+});
+
+ipcMain.on('window-close', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.close();
+    }
 });
 
 ipcMain.on('open-login', () => {

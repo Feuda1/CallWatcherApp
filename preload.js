@@ -39,5 +39,9 @@ contextBridge.exposeInMainWorld('api', {
     onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', (event, info) => callback(info)),
     onUpdateError: (callback) => ipcRenderer.on('update-error', (event, err) => callback(err)),
     onBulkProgress: (callback) => ipcRenderer.on('bulk-progress', (event, count) => callback(count)),
-    restartApp: () => ipcRenderer.send('restart_app')
+    restartApp: () => ipcRenderer.send('restart_app'),
+
+    minimizeWindow: () => ipcRenderer.send('window-minimize'),
+    maximizeWindow: () => ipcRenderer.send('window-maximize'),
+    closeWindow: () => ipcRenderer.send('window-close')
 });

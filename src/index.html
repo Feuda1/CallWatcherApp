@@ -11,16 +11,38 @@
 </head>
 
 <body>
+    <div class="titlebar">
+        <div class="titlebar-drag">
+            <span class="titlebar-title">Call Watcher</span>
+            <span id="app-version" class="titlebar-version">v...</span>
+        </div>
+        <div class="titlebar-controls">
+            <button id="btn-minimize" class="titlebar-btn" title="Свернуть">
+                <svg width="12" height="12" viewBox="0 0 12 12">
+                    <rect fill="currentColor" width="10" height="1" x="1" y="6"></rect>
+                </svg>
+            </button>
+            <button id="btn-maximize" class="titlebar-btn" title="Развернуть">
+                <svg width="12" height="12" viewBox="0 0 12 12">
+                    <rect stroke="currentColor" fill="none" width="9" height="9" x="1.5" y="1.5"></rect>
+                </svg>
+            </button>
+            <button id="btn-close" class="titlebar-btn titlebar-btn-close" title="Закрыть">
+                <svg width="12" height="12" viewBox="0 0 12 12">
+                    <path fill="currentColor"
+                        d="M6.707 6l3.146-3.146a.5.5 0 00-.707-.708L6 5.293 2.854 2.146a.5.5 0 10-.708.708L5.293 6l-3.147 3.146a.5.5 0 00.708.708L6 6.707l3.146 3.147a.5.5 0 00.708-.708L6.707 6z" />
+                </svg>
+            </button>
+        </div>
+    </div>
+
     <div class="app-layout">
 
         <aside class="sidebar">
             <div class="sidebar-header">
-                <div class="brand">
-                    <div class="brand-icon">📞</div>
-                    <div class="brand-name">Call Watcher</div>
-                </div>
                 <div class="connection-status" title="Статус подключения">
                     <div id="status-indicator" class="status-dot offline"></div>
+                    <span class="status-text">Подключение...</span>
                 </div>
             </div>
 
@@ -33,18 +55,36 @@
 
 
                 <div id="bulk-stats" class="bulk-stats hidden">
-                    <div class="stat-item">
-                        <span class="stat-value" id="stat-total">0</span>
-                        <span class="stat-label">Всего</span>
+                    <div class="bulk-stats-row">
+                        <div class="stat-item">
+                            <span class="stat-value" id="stat-total">0</span>
+                            <span class="stat-label">Всего</span>
+                        </div>
+                        <div class="stat-item stat-success">
+                            <span class="stat-value" id="stat-filled">0</span>
+                            <span class="stat-label">Создано</span>
+                        </div>
+                        <div class="stat-item stat-pending">
+                            <span class="stat-value" id="stat-unfilled">0</span>
+                            <span class="stat-label">Осталось</span>
+                        </div>
                     </div>
-                    <div class="stat-item stat-success">
-                        <span class="stat-value" id="stat-filled">0</span>
-                        <span class="stat-label">Создано</span>
+                </div>
+
+                <div id="duration-filter-container" class="duration-filter hidden">
+                    <div class="filter-row">
+                        <span class="filter-label">Мин. длительность:</span>
+                        <span id="duration-value" class="duration-value">0 сек</span>
                     </div>
-                    <div class="stat-item stat-pending">
-                        <span class="stat-value" id="stat-unfilled">0</span>
-                        <span class="stat-label">Осталось</span>
+                    <div class="filter-presets">
+                        <button class="preset-btn active" data-value="0">0с</button>
+                        <button class="preset-btn" data-value="30">30с</button>
+                        <button class="preset-btn" data-value="60">1м</button>
+                        <button class="preset-btn" data-value="120">2м</button>
+                        <button class="preset-btn" data-value="180">3м</button>
                     </div>
+                    <input type="range" id="duration-slider" class="duration-slider" min="0" max="300" step="10"
+                        value="0">
                 </div>
 
                 <div class="section-label">ИСТОРИЯ</div>
@@ -57,7 +97,6 @@
             <button id="btn-clear-history" class="btn-text-danger" title="Очистить историю">
                 🗑 Очистить историю
             </button>
-            <div id="app-version" class="app-version">v...</div>
         </aside>
 
 
@@ -103,6 +142,7 @@
                 <header class="call-header">
                     <div class="call-primary-info">
                         <h1 id="call-phone" class="phone-number">+7 ...</h1>
+                        <span id="call-status-badge" class="call-status-badge"></span>
                         <span id="call-duration" class="timer-badge">00:00</span>
                     </div>
                     <div class="header-actions">
