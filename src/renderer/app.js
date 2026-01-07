@@ -36,6 +36,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnMaximize) btnMaximize.addEventListener('click', () => window.api.maximizeWindow());
     if (btnClose) btnClose.addEventListener('click', () => window.api.closeWindow());
 
+    const btnOpenBrowser = document.getElementById('btn-open-browser');
+    if (btnOpenBrowser) {
+        btnOpenBrowser.addEventListener('click', () => {
+            if (currentCallData) {
+                window.api.openTicketInBrowser(currentCallData, selectedClientId);
+            }
+        });
+    }
+
     const audioPlayerContainer = document.getElementById('audio-player-container');
     const callAudio = document.getElementById('call-audio');
     const speedButtons = document.querySelectorAll('.btn-speed');
@@ -150,10 +159,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const durationValueEl = document.getElementById('duration-value');
     const durationSlider = document.getElementById('duration-slider');
 
-    function updateDuration(value) {
+    const durationSliderInline = document.getElementById('duration-slider-inline');
+    const durationValueInline = document.getElementById('duration-value-inline');
+
+    function updateDuration(value, syncToInline = true) {
         minDuration = parseInt(value);
         if (durationSlider) durationSlider.value = minDuration;
         if (durationValueEl) durationValueEl.textContent = minDuration + ' сек';
+
+        if (syncToInline && durationSliderInline) durationSliderInline.value = minDuration;
+        if (durationValueInline) durationValueInline.textContent = minDuration + 'с';
 
         presetBtns.forEach(btn => {
             if (parseInt(btn.dataset.value) === minDuration) {
@@ -163,12 +178,18 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        applyDurationFilter();
+        applyAllFilters();
     }
 
     if (durationSlider) {
         durationSlider.addEventListener('input', (e) => {
             updateDuration(e.target.value);
+        });
+    }
+
+    if (durationSliderInline) {
+        durationSliderInline.addEventListener('input', (e) => {
+            updateDuration(e.target.value, false);
         });
     }
 
@@ -178,10 +199,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    function applyDurationFilter() {
+    function applyAllFilters() {
         bulkCalls = allBulkCalls.filter(c => {
             const dur = parseInt(c.duration) || 0;
-            return dur >= minDuration;
+            if (dur < minDuration) return false;
+
+            if (selectedDates && selectedDates.size > 0) {
+                const parsed = parseCallDate(c.date);
+                if (!parsed || !selectedDates.has(parsed.formatted)) return false;
+            }
+
+            return true;
         });
         bulkIndex = 0;
         updateBulkPosition();
@@ -190,6 +218,18 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             showCallData(null);
         }
+    }
+
+    let selectedDates = new Set();
+    function parseCallDate(dateStr) {
+        if (!dateStr) return null;
+        const match = dateStr.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+        if (!match) return null;
+        return { formatted: `${match[1]}.${match[2]}.${match[3]}` };
+    }
+
+    function applyDurationFilter() {
+        applyAllFilters();
     }
 
     const bulkFilterEl = document.getElementById('duration-filter-container');
@@ -253,8 +293,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (bulkPositionEl) {
             bulkPositionEl.textContent = `${bulkIndex + 1} из ${bulkCalls.length}`;
         }
+        const btnFirstCall = document.getElementById('btn-first-call');
+        const btnLastCall = document.getElementById('btn-last-call');
+
         if (btnPrevCall) btnPrevCall.disabled = bulkIndex <= 0;
         if (btnNextCall) btnNextCall.disabled = bulkIndex >= bulkCalls.length - 1;
+        if (btnFirstCall) btnFirstCall.disabled = bulkIndex <= 0;
+        if (btnLastCall) btnLastCall.disabled = bulkIndex >= bulkCalls.length - 1;
     }
 
 
@@ -273,6 +318,134 @@ document.addEventListener('DOMContentLoaded', () => {
             updateBulkPosition();
         }
     });
+
+    document.getElementById('btn-first-call')?.addEventListener('click', () => {
+        if (bulkCalls.length > 0) {
+            bulkIndex = 0;
+            showCallData(bulkCalls[bulkIndex]);
+            updateBulkPosition();
+        }
+    });
+
+    document.getElementById('btn-last-call')?.addEventListener('click', () => {
+        if (bulkCalls.length > 0) {
+            bulkIndex = bulkCalls.length - 1;
+            showCallData(bulkCalls[bulkIndex]);
+            updateBulkPosition();
+        }
+    });
+
+    const btnDatePicker = document.getElementById('btn-date-picker');
+    const datePickerDropdown = document.getElementById('date-picker-dropdown');
+    const datePickerList = document.getElementById('date-picker-list');
+    const datePickerLabel = document.getElementById('date-picker-label');
+    const btnClearDate = document.getElementById('btn-clear-date');
+
+    function getAvailableDates() {
+        const dateCounts = {};
+        allBulkCalls.forEach(call => {
+            const parsed = parseCallDate(call.date);
+            if (parsed) {
+                const key = parsed.formatted;
+                dateCounts[key] = (dateCounts[key] || 0) + 1;
+            }
+        });
+
+        return Object.entries(dateCounts)
+            .map(([date, count]) => ({ date, count }))
+            .sort((a, b) => {
+                const [d1, m1, y1] = a.date.split('.');
+                const [d2, m2, y2] = b.date.split('.');
+                return new Date(y2, m2 - 1, d2) - new Date(y1, m1 - 1, d1);
+            });
+    }
+
+    function updateDatePickerLabel() {
+        if (!datePickerLabel) return;
+
+        if (selectedDates.size === 0) {
+            datePickerLabel.textContent = 'Все даты';
+            btnDatePicker?.classList.remove('active');
+        } else if (selectedDates.size === 1) {
+            datePickerLabel.textContent = [...selectedDates][0];
+            btnDatePicker?.classList.add('active');
+        } else {
+            datePickerLabel.textContent = `${selectedDates.size} дат`;
+            btnDatePicker?.classList.add('active');
+        }
+    }
+
+    function applyDateFilter() {
+        applyAllFilters();
+        updateDatePickerLabel();
+        console.log(`[CallWatcher] Фильтр: ${selectedDates.size} дат, ${bulkCalls.length} звонков`);
+    }
+
+    function renderDateList() {
+        if (!datePickerList) return;
+
+        const dates = getAvailableDates();
+        datePickerList.innerHTML = '';
+
+        if (dates.length === 0) {
+            datePickerList.innerHTML = '<div style="padding: 1rem; color: #64748b; text-align: center;">Нет звонков</div>';
+            return;
+        }
+
+        dates.forEach(({ date, count }) => {
+            const item = document.createElement('div');
+            const isSelected = selectedDates.has(date);
+            item.className = 'date-picker-item' + (isSelected ? ' selected' : '');
+            item.innerHTML = `
+                <span class="date-checkbox">${isSelected ? '✓' : ''}</span>
+                <span class="date-text">${date}</span>
+                <span class="date-count">${count}</span>
+            `;
+            item.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleDate(date);
+            });
+            datePickerList.appendChild(item);
+        });
+    }
+
+    function toggleDate(date) {
+        if (selectedDates.has(date)) {
+            selectedDates.delete(date);
+        } else {
+            selectedDates.add(date);
+        }
+        renderDateList();
+        applyDateFilter();
+    }
+
+    function clearDateFilter() {
+        selectedDates.clear();
+        renderDateList();
+        applyDateFilter();
+    }
+
+    btnDatePicker?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = !datePickerDropdown?.classList.contains('hidden');
+
+        if (!isOpen) {
+            renderDateList();
+            datePickerDropdown?.classList.remove('hidden');
+        } else {
+            datePickerDropdown?.classList.add('hidden');
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (datePickerDropdown && !datePickerDropdown.classList.contains('hidden')) {
+            if (!e.target.closest('.date-picker-wrapper')) {
+                datePickerDropdown.classList.add('hidden');
+            }
+        }
+    });
+
+    btnClearDate?.addEventListener('click', clearDateFilter);
 
     btnRefreshBulk?.addEventListener('click', async () => {
         btnRefreshBulk.classList.add('loading');
@@ -383,18 +556,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         if (playBtnWrapper) playBtnWrapper.classList.add('loading');
 
-                        window.api.getAudio(audioUrl).then(buffer => {
+                        window.api.getAudio(audioUrl).then(result => {
                             if (playBtnWrapper) playBtnWrapper.classList.remove('loading');
 
-                            if (buffer && buffer.length > 0) {
-                                const blob = new Blob([buffer], { type: 'audio/mpeg' });
+                            if (result && result.error) {
+                                console.error('Аудио недоступно:', result.error);
+                                audioPlayerContainer.classList.add('audio-error');
+                                audioTimeTotal.textContent = 'Недоступно';
+                                audioPlayBtn.disabled = true;
+                                audioPlayBtn.title = `Запись недоступна: ${result.error}`;
+                                return;
+                            }
+
+                            if (result && result.length > 0) {
+                                audioPlayerContainer.classList.remove('audio-error');
+                                audioPlayBtn.disabled = false;
+                                audioPlayBtn.title = '';
+                                const blob = new Blob([result], { type: 'audio/mpeg' });
                                 callAudio.src = URL.createObjectURL(blob);
                             } else {
                                 console.error('Аудио буфер пуст');
+                                audioTimeTotal.textContent = 'Ошибка';
                             }
                         }).catch(err => {
                             if (playBtnWrapper) playBtnWrapper.classList.remove('loading');
                             console.error('Ошибка получения аудио:', err);
+                            audioTimeTotal.textContent = 'Ошибка';
                         });
                     }
                 } else {
@@ -781,18 +968,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         historyEmpty.classList.add('hidden');
-        historyList.innerHTML = '';
 
-        calls.forEach(call => {
-            const li = document.createElement('li');
-            li.className = 'history-item';
-            li.dataset.id = call.id;
-
-
-            if (currentCallData && call.id === currentCallData.id) {
-                li.classList.add('selected');
-            }
-
+        const updateOrCreateItem = (call, existingEl) => {
+            let li = existingEl;
             let statusClass = 'status-unprocessed';
             let statusText = 'ОЖИДАЕТ';
 
@@ -804,19 +982,68 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusText = 'ПРОПУЩЕН';
             }
 
-            li.innerHTML = `
-                <div class="history-phone">${escapeHtml(call.phone || 'Неизвестный')}</div>
+            const phone = escapeHtml(call.phone || 'Неизвестный');
+            const date = call.date || '';
+
+            const innerHTML = `
+                <div class="history-phone">${phone}</div>
                 <div class="history-meta">
-                    <div>${call.date || ''}</div>
+                    <div>${date}</div>
                     <span class="history-status-badge ${statusClass}">${statusText}</span>
                 </div>
             `;
-            li.addEventListener('click', () => {
-                showCallData(call);
-                window.api.lockCall(call.id);
-            });
-            historyList.appendChild(li);
+
+            if (!li) {
+                li = document.createElement('li');
+                li.className = 'history-item';
+                li.dataset.id = call.id;
+                li.addEventListener('click', () => {
+                    showCallData(call);
+                    window.api.lockCall(call.id);
+                });
+                li.innerHTML = innerHTML;
+            } else {
+                if (li.innerHTML !== innerHTML) {
+                    li.innerHTML = innerHTML;
+                }
+            }
+
+            if (currentCallData && call.id === currentCallData.id) {
+                li.classList.add('selected');
+            } else {
+                li.classList.remove('selected');
+            }
+
+            return li;
+        };
+
+        const existingItems = Array.from(historyList.querySelectorAll('.history-item'));
+        const existingMap = new Map();
+        existingItems.forEach(el => existingMap.set(el.dataset.id, el));
+
+        // 2. Iterate new calls
+        calls.forEach((call, index) => {
+            const existingEl = existingMap.get(call.id);
+            const li = updateOrCreateItem(call, existingEl);
+
+            if (!existingEl) {
+                if (index === 0) {
+                    historyList.prepend(li);
+                } else {
+                    const prevCall = calls[index - 1];
+                    const prevEl = historyList.querySelector(`.history-item[data-id="${prevCall.id}"]`);
+                    if (prevEl) {
+                        prevEl.after(li);
+                    } else {
+                        historyList.appendChild(li);
+                    }
+                }
+            } else {
+                existingMap.delete(call.id);
+            }
         });
+
+        existingMap.forEach(el => el.remove());
     }
 
     function saveDraft() {

@@ -71,21 +71,6 @@
                     </div>
                 </div>
 
-                <div id="duration-filter-container" class="duration-filter hidden">
-                    <div class="filter-row">
-                        <span class="filter-label">Мин. длительность:</span>
-                        <span id="duration-value" class="duration-value">0 сек</span>
-                    </div>
-                    <div class="filter-presets">
-                        <button class="preset-btn active" data-value="0">0с</button>
-                        <button class="preset-btn" data-value="30">30с</button>
-                        <button class="preset-btn" data-value="60">1м</button>
-                        <button class="preset-btn" data-value="120">2м</button>
-                        <button class="preset-btn" data-value="180">3м</button>
-                    </div>
-                    <input type="range" id="duration-slider" class="duration-slider" min="0" max="300" step="10"
-                        value="0">
-                </div>
 
                 <div class="section-label">ИСТОРИЯ</div>
                 <ul id="history-list" class="history-list">
@@ -103,19 +88,70 @@
         <main class="workspace">
 
             <div id="bulk-nav" class="bulk-nav hidden">
-                <button id="btn-prev-call" class="nav-btn" title="Предыдущий звонок">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button id="btn-first-call" class="nav-btn" title="В начало">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2.5">
+                        <path d="M11 17l-5-5 5-5M18 17l-5-5 5-5" />
+                    </svg>
+                </button>
+                <button id="btn-prev-call" class="nav-btn" title="Назад">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2.5">
                         <path d="M15 18l-6-6 6-6" />
                     </svg>
                 </button>
-                <span id="bulk-position" class="bulk-position">1 из 10</span>
-                <button id="btn-next-call" class="nav-btn" title="Следующий звонок">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <span id="bulk-position" class="bulk-position">1 / 10</span>
+                <button id="btn-next-call" class="nav-btn" title="Вперёд">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2.5">
                         <path d="M9 18l6-6-6-6" />
                     </svg>
                 </button>
-                <button id="btn-refresh-bulk" class="nav-btn nav-btn-refresh" title="Обновить список">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <button id="btn-last-call" class="nav-btn" title="В конец">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2.5">
+                        <path d="M13 17l5-5-5-5M6 17l5-5-5-5" />
+                    </svg>
+                </button>
+
+                <div class="nav-separator"></div>
+
+                <div class="date-picker-wrapper">
+                    <button id="btn-date-picker" class="date-picker-btn" title="Выбрать дату">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2" />
+                            <line x1="16" y1="2" x2="16" y2="6" />
+                            <line x1="8" y1="2" x2="8" y2="6" />
+                            <line x1="3" y1="10" x2="21" y2="10" />
+                        </svg>
+                        <span id="date-picker-label">Все даты</span>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M6 9l6 6 6-6" />
+                        </svg>
+                    </button>
+                    <div id="date-picker-dropdown" class="date-picker-dropdown hidden">
+                        <div class="date-picker-header">
+                            <span>Выберите дату</span>
+                            <button id="btn-clear-date" class="date-clear-btn" title="Сбросить">Сбросить</button>
+                        </div>
+                        <div id="date-picker-list" class="date-picker-list">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="nav-separator"></div>
+
+                <div class="duration-filter-inline">
+                    <span class="duration-label">≥</span>
+                    <input type="range" id="duration-slider-inline" class="duration-slider-inline" min="0" max="180"
+                        value="0" step="5">
+                    <span id="duration-value-inline" class="duration-value-inline">0с</span>
+                </div>
+
+                <button id="btn-refresh-bulk" class="nav-btn nav-btn-refresh" title="Обновить">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M23 4v6h-6" />
                         <path d="M1 20v-6h6" />
                         <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
@@ -147,6 +183,9 @@
                     </div>
                     <div class="header-actions">
                         <span id="call-date" class="date-badge">...</span>
+                        <button id="btn-open-browser" class="btn btn-secondary text-sm"
+                            title="Открыть страницу создания заявки в браузере (обход ограничения 3 дней)">🌐 В
+                            браузере</button>
                         <button id="btn-skip" class="btn btn-secondary text-sm">Пропустить</button>
                     </div>
                 </header>

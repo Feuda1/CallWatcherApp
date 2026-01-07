@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, session, screen } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, session, screen, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
@@ -482,65 +482,79 @@ let bulkCallsCache = [];
 let bulkLastFetched = 0;
 let bulkInitialLoadDone = false;
 
-async function fetchAllCalls(forceRefresh = false) {
+let currentFetchPromise = null;
+
+async function fetchAllCalls(forceRefresh = false, emitProgress = true) {
 
     if (!forceRefresh && bulkCallsCache.length > 0) {
         return bulkCallsCache;
     }
 
-    const ses = session.defaultSession;
-    const allCalls = [];
-    let page = 1;
-    const MAX_PAGES_SAFETY = 50;
-    let hasMore = true;
+    if (currentFetchPromise) {
+        console.log('[CallWatcher] Bulk: Joining existing fetch operation...');
+        return currentFetchPromise;
+    }
 
-    try {
-        while (hasMore && page <= MAX_PAGES_SAFETY) {
-            const url = `https://clients.denvic.ru/PhoneCalls?onlyMy=true&page=${page}`;
-            console.log(`[CallWatcher] Bulk: Fetching page ${page}...`);
+    currentFetchPromise = (async () => {
+        const ses = session.defaultSession;
+        const allCalls = [];
+        let page = 1;
+        const MAX_PAGES = 20;
+        let hasMore = true;
 
-            const response = await ses.fetch(url, { credentials: 'include' });
+        try {
+            while (hasMore && page <= MAX_PAGES) {
+                const url = `https://clients.denvic.ru/PhoneCalls?onlyMy=true&page=${page}`;
+                console.log(`[CallWatcher] Bulk: Fetching page ${page}...`);
 
-            if (!response.ok || response.url.includes('Login')) {
-                console.log('[CallWatcher] Bulk: Not logged in or error');
-                if (page === 1) return [];
-                break;
-            }
+                const response = await ses.fetch(url, { credentials: 'include' });
 
-            const html = await response.text();
-            const pageCalls = parseAllCallsFromPage(html);
-
-            if (pageCalls.length === 0) {
-                console.log(`[CallWatcher] Bulk: Page ${page} is empty, stopping.`);
-                hasMore = false;
-            } else {
-
-                const newCalls = pageCalls.filter(nc => !allCalls.find(ac => ac.id === nc.id));
-                allCalls.push(...newCalls);
-                console.log(`[CallWatcher] Bulk: Added ${newCalls.length} calls from page ${page}`);
-
-                if (mainWindow && !mainWindow.isDestroyed()) {
-                    mainWindow.webContents.send('bulk-progress', allCalls.length);
+                if (!response.ok || response.url.includes('Login')) {
+                    console.log('[CallWatcher] Bulk: Not logged in or error');
+                    if (page === 1) return [];
+                    break;
                 }
 
-                page++;
+                const html = await response.text();
+                const pageCalls = parseAllCallsFromPage(html);
+
+                if (pageCalls.length === 0) {
+                    console.log(`[CallWatcher] Bulk: Page ${page} is empty, stopping.`);
+                    hasMore = false;
+                } else {
+
+                    const newCalls = pageCalls.filter(nc => !allCalls.find(ac => ac.id === nc.id));
+                    allCalls.push(...newCalls);
+                    console.log(`[CallWatcher] Bulk: Added ${newCalls.length} calls from page ${page}`);
+
+                    if (mainWindow && !mainWindow.isDestroyed() && emitProgress) {
+                        mainWindow.webContents.send('bulk-progress', allCalls.length);
+                    }
+
+                    page++;
+                }
             }
+
+            console.log(`[CallWatcher] Bulk: Loaded ${allCalls.length} total calls`);
+
+            bulkCallsCache = allCalls;
+            bulkLastFetched = Date.now();
+            return allCalls;
+
+        } catch (error) {
+            console.error('[CallWatcher] Bulk fetch error:', error);
+            return [];
+        } finally {
+            currentFetchPromise = null;
         }
+    })();
 
-        console.log(`[CallWatcher] Bulk: Loaded ${allCalls.length} total calls`);
-
-        bulkCallsCache = allCalls;
-        bulkLastFetched = Date.now();
-        return allCalls;
-
-    } catch (error) {
-        console.error('[CallWatcher] Bulk fetch error:', error);
-        return [];
-    }
+    return currentFetchPromise;
 }
 
 function parseAllCallsFromPage(html) {
     const calls = [];
+    const foundIds = new Set();
 
     const allLinksRegex = /href="\/Tickets\/Create\?([^"]+)"/g;
     const allLinkMatches = [...html.matchAll(allLinksRegex)];
@@ -560,11 +574,28 @@ function parseAllCallsFromPage(html) {
         const endIndex = nextMatch ? nextMatch.index : html.length;
         const blockHtml = html.slice(startIndex, endIndex);
 
+
+        const rowStart = html.lastIndexOf('<tr', startIndex);
+        if (rowStart !== -1) {
+            const rowHtml = html.slice(rowStart, endIndex);
+            const tdMatches = [...rowHtml.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)];
+            if (tdMatches.length >= 2) {
+                const sourceTd = tdMatches[1][1];
+                const sourceText = sourceTd.replace(/<[^>]+>/g, '').trim();
+
+                if (/^\d{2,4}$/.test(sourceText)) {
+                    continue;
+                }
+            }
+        }
+
         const params = new URLSearchParams(match[1]);
         const phone = params.get('selectedPhoneNuber') || '';
         const linkedId = params.get('linkedId') || '';
         const date = params.get('selectedPhoneDate') || '';
         const duration = params.get('selectedPhoneDuration') || '';
+
+        if (linkedId) foundIds.add(linkedId);
 
         const suggestions = [];
         const suggestionRegex = /dropdown-item[^>]*href="\/Tickets\/Create\?id=(\d+)[^"]*"[^>]*>([\s\S]*?)<\/a>/g;
@@ -594,13 +625,106 @@ function parseAllCallsFromPage(html) {
         });
     }
 
+    const audioLinkRegex = /GetCallRecord\?id=([^"&\s]+)/g;
+    const audioMatches = [...html.matchAll(audioLinkRegex)];
+
+    for (const audioMatch of audioMatches) {
+        const linkedId = audioMatch[1];
+
+        if (foundIds.has(linkedId)) continue;
+        foundIds.add(linkedId);
+
+        const pos = audioMatch.index;
+
+        let rowStart = html.lastIndexOf('<tr', pos);
+        if (rowStart === -1) rowStart = Math.max(0, pos - 2000);
+
+        let rowEnd = html.indexOf('</tr>', pos);
+        if (rowEnd === -1) rowEnd = Math.min(html.length, pos + 2000);
+        else rowEnd += 5;
+
+        const rowHtml = html.slice(rowStart, rowEnd);
+
+        const tdMatches = [...rowHtml.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)];
+        if (tdMatches.length >= 2) {
+            const sourceTd = tdMatches[1][1];
+            const sourceText = sourceTd.replace(/<[^>]+>/g, '').trim();
+
+            if (/^\d{2,4}$/.test(sourceText)) {
+                continue;
+            }
+        }
+
+        let phone = '';
+        const phonePatterns = [
+            /&#x2B;7\s*\((\d{3})\)\s*(\d{3})-(\d{2})-(\d{2})/,
+            /\+7\s*\((\d{3})\)\s*(\d{3})-(\d{2})-(\d{2})/,
+            />7(\d{10})</,
+            />\+?7\s*(\d{3})\s*(\d{3})\s*(\d{2})\s*(\d{2})</
+        ];
+
+        for (const pattern of phonePatterns) {
+            const phoneMatch = rowHtml.match(pattern);
+            if (phoneMatch) {
+                if (phoneMatch.length === 5) {
+                    phone = '7' + phoneMatch[1] + phoneMatch[2] + phoneMatch[3] + phoneMatch[4];
+                } else if (phoneMatch.length === 2) {
+                    phone = '7' + phoneMatch[1];
+                }
+                break;
+            }
+        }
+
+        const dateMatch = rowHtml.match(/>(\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2}:\d{2})</);
+        const date = dateMatch ? dateMatch[1] : '';
+
+        let duration = '';
+        const durationPatterns = [
+            />(\d+)\s*мин\s*(\d+)\s*сек/i,
+            />(\d+)\s*сек/i,
+            />(\d+)\s*мин/i,
+        ];
+
+        for (const pattern of durationPatterns) {
+            const durMatch = rowHtml.match(pattern);
+            if (durMatch) {
+                if (durMatch.length === 3) {
+                    duration = String(parseInt(durMatch[1]) * 60 + parseInt(durMatch[2]));
+                } else if (pattern.source.includes('мин') && !pattern.source.includes('сек')) {
+                    duration = String(parseInt(durMatch[1]) * 60);
+                } else {
+                    duration = durMatch[1];
+                }
+                break;
+            }
+        }
+
+        const hasTicket = rowHtml.includes('/Tickets/Details/') || rowHtml.includes('btn-success');
+
+        if (phone || date || linkedId) {
+            const audioUrl = `https://clients.denvic.ru/PhoneCalls/GetCallRecord?id=${linkedId}`;
+
+            calls.push({
+                id: linkedId,
+                phone,
+                date,
+                duration,
+                audioUrl,
+                suggestions: [],
+                hasTicket,
+                rawParams: '',
+                isLegacy: true
+            });
+        }
+    }
+
     return calls;
 }
 
 async function restoreHistoryFromServer() {
     console.log('[CallWatcher] Начало восстановления истории с сервера...');
     try {
-        const serverCalls = await fetchAllCalls(true);
+        const serverCalls = await fetchAllCalls(true, false);
         let addedCount = 0;
 
 
@@ -952,23 +1076,24 @@ ipcMain.on('fill-ticket', () => {
 
 ipcMain.handle('get-audio', async (event, url) => {
     try {
-        console.log('[CallWatcher] Проксирование аудио запроса:', url);
         const ses = session.defaultSession;
         const response = await ses.fetch(url, {
             credentials: 'include'
         });
 
         if (!response.ok) {
-            console.error(`[CallWatcher] Ошибка получения аудио: ${response.status} ${response.statusText}`);
-            throw new Error(`Ошибка получения аудио: ${response.statusText}`);
+            if (response.status !== 500) {
+                console.error(`[CallWatcher] Ошибка получения аудио: HTTP ${response.status}`);
+            }
+            return { error: `HTTP ${response.status}: ${response.statusText}`, status: response.status };
         }
 
         const buffer = await response.arrayBuffer();
-        console.log(`[CallWatcher] Аудио успешно получено. Размер: ${buffer.byteLength} байт`);
+        console.log(`[CallWatcher] Аудио получено: ${buffer.byteLength} байт`);
         return Buffer.from(buffer);
     } catch (e) {
-        console.error('[CallWatcher] Ошибка аудио прокси:', e);
-        return null;
+        console.error('[CallWatcher] Ошибка аудио:', e.message);
+        return { error: e.message };
     }
 });
 
@@ -1144,6 +1269,40 @@ ipcMain.on('update-call-draft', (event, callId, draft) => {
         item.draft = draft;
         saveHistory();
     }
+});
+
+ipcMain.on('open-ticket-browser', (event, callData, clientId) => {
+    if (!callData) {
+        console.error('[CallWatcher] Нет данных звонка для открытия в браузере');
+        return;
+    }
+
+    const params = new URLSearchParams();
+
+    if (clientId) {
+        params.append('id', clientId);
+    }
+
+    if (callData.phone) {
+        params.append('selectedPhoneNuber', callData.phone);
+    }
+
+    if (callData.id) {
+        params.append('linkedId', callData.id);
+    }
+
+    if (callData.date) {
+        params.append('selectedPhoneDate', callData.date);
+    }
+
+    if (callData.duration) {
+        params.append('selectedPhoneDuration', callData.duration);
+    }
+
+    const url = `https://clients.denvic.ru/Tickets/Create?${params.toString()}`;
+    console.log('[CallWatcher] Открытие в браузере:', url);
+
+    shell.openExternal(url);
 });
 
 
