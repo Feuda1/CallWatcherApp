@@ -51,7 +51,6 @@ function loadHistory() {
                 }
                 if (c.status === 'skipped') skippedCount++;
             });
-            console.log(`[CallWatcher] Загружена история: ${history.length} записей. Из них пропущено: ${skippedCount}`);
         }
     } catch (e) {
         console.error('[CallWatcher] Ошибка загрузки истории:', e);
@@ -88,7 +87,6 @@ function saveHistoryImmediate() {
         }, null, 2);
         fs.writeFileSync(filePath, data, 'utf8');
         const skippedCount = callHistory.filter(c => c.status === 'skipped').length;
-        console.log(`[CallWatcher] История сохранена мгновенно. Всего: ${callHistory.length}, Пропущено: ${skippedCount}`);
     } catch (e) {
         console.error('[CallWatcher] Ошибка сохранения истории (m):', e);
     }
