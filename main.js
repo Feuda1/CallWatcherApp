@@ -1171,7 +1171,19 @@ ipcMain.handle('create-ticket', async (event, { callData, clientId, clientName, 
         console.log('[CallWatcher] Создание заявки для:', clientId);
         const ses = session.defaultSession;
 
-        const pageUrl = `https://clients.denvic.ru/Tickets/Create?${callData.rawParams}`;
+        let urlParams = callData.rawParams;
+        if (!urlParams) {
+            const params = new URLSearchParams();
+            if (callData.phone) params.append('selectedPhoneNuber', callData.phone);
+            if (callData.id) params.append('linkedId', callData.id);
+            if (callData.date) params.append('selectedPhoneDate', callData.date);
+            if (callData.duration) params.append('selectedPhoneDuration', callData.duration);
+            urlParams = params.toString();
+            console.log('[CallWatcher] Сгенерированы параметры URL:', urlParams);
+        }
+
+        const pageUrl = `https://clients.denvic.ru/Tickets/Create?${urlParams}`;
+        console.log('[CallWatcher] Загрузка страницы:', pageUrl);
         const pageResponse = await ses.fetch(pageUrl);
 
         if (!pageResponse.ok) {
@@ -1180,6 +1192,20 @@ ipcMain.handle('create-ticket', async (event, { callData, clientId, clientName, 
 
         const pageHtml = await pageResponse.text();
 
+        if (pageHtml.includes('Login') && pageHtml.includes('Password')) {
+            throw new Error('Требуется авторизация. Пожалуйста, войдите в систему.');
+        }
+
+        if (pageHtml.includes('невозможно создать') || pageHtml.includes('ограничен') ||
+            pageHtml.includes('недоступн') || pageHtml.includes('error')) {
+            const errorMatch = pageHtml.match(/<div[^>]*class="[^"]*alert[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+            const errorText = errorMatch ? errorMatch[1].replace(/<[^>]+>/g, '').trim() : '';
+            console.log('[CallWatcher] Возможная ошибка на странице:', errorText);
+        }
+
+        if (!pageHtml.includes('__RequestVerificationToken')) {
+            console.warn('[CallWatcher] Не найден токен верификации, возможно форма недоступна');
+        }
 
         const formParams = new URLSearchParams();
 
@@ -1225,11 +1251,9 @@ ipcMain.handle('create-ticket', async (event, { callData, clientId, clientName, 
 
         const formattedDesc = (description || '').replace(/\n/g, '<br>');
 
-
-        const htmlDesc = `<p>Входящий звонок: ${callData.phone || '?'}<br>Дата: ${callData.date}<br>Длительность: ${callData.duration} с.</p>${formattedDesc ? `<br><p>${formattedDesc}</p>` : ''}`;
+        const htmlDesc = `<p>Входящий звонок: ${callData.phone || '?'}<br>Дата: ${callData.date}<br>Длительность: ${callData.duration} с.${formattedDesc ? `<br><br>${formattedDesc}` : ''}</p>`;
 
         formParams.set('newArticleText', htmlDesc);
-
 
         const createResponse = await ses.fetch('https://clients.denvic.ru/Tickets/Create', {
             method: 'POST',
@@ -1239,7 +1263,28 @@ ipcMain.handle('create-ticket', async (event, { callData, clientId, clientName, 
             body: formParams.toString()
         });
 
-        const result = await createResponse.json();
+        const contentType = createResponse.headers.get('content-type') || '';
+        let result;
+
+        if (contentType.includes('application/json')) {
+            result = await createResponse.json();
+        } else {
+            const responseText = await createResponse.text();
+            console.log('[CallWatcher] Сервер вернул HTML вместо JSON');
+
+            if (responseText.includes('/Tickets/Details/')) {
+                const detailsMatch = responseText.match(/\/Tickets\/Details\/(\d+)/);
+                if (detailsMatch) {
+                    result = { IsValid: true, Redirect: true, Address: `/Tickets/Details/${detailsMatch[1]}` };
+                } else {
+                    result = { IsValid: false, Error: 'Не удалось определить результат создания' };
+                }
+            } else {
+                const errorMatch = responseText.match(/<div[^>]*class="[^"]*alert[^"]*error[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
+                const errorText = errorMatch ? errorMatch[1].replace(/<[^>]+>/g, '').trim() : 'Неизвестная ошибка сервера';
+                result = { IsValid: false, Error: errorText };
+            }
+        }
 
         console.log('[CallWatcher] Результат создания заявки:', result);
 

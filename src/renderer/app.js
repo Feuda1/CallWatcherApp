@@ -52,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const audioProgress = document.getElementById('audio-progress');
     const audioTimeCurrent = document.getElementById('audio-time-current');
     const audioTimeTotal = document.getElementById('audio-time-total');
+    let currentPlaybackRate = 1;
 
     function formatTime(seconds) {
         if (isNaN(seconds)) return '0:00';
@@ -89,6 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         callAudio.addEventListener('loadedmetadata', () => {
             audioTimeTotal.textContent = formatTime(callAudio.duration);
+            callAudio.playbackRate = currentPlaybackRate;
         });
 
         audioProgress.addEventListener('input', () => {
@@ -102,6 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
         speedButtons.forEach(btn => {
             btn.addEventListener('click', () => {
                 const speed = parseFloat(btn.dataset.speed);
+                currentPlaybackRate = speed;
                 if (callAudio) {
                     callAudio.playbackRate = speed;
                 }
@@ -892,13 +895,14 @@ document.addEventListener('DOMContentLoaded', () => {
         btnCreate.textContent = 'Создание...';
 
         try {
-            const result = await window.api.createTicket({
+            const ticketData = {
                 callData: currentCallData,
                 clientId: selectedClientId,
                 clientName: selectedClientObject ? (selectedClientObject._displayName || selectedClientObject.name || '') : '',
                 subject: ticketSubject.value.trim() || 'Входящий звонок',
                 description: ticketDesc.value.trim()
-            });
+            };
+            const result = await window.api.createTicket(ticketData);
 
             if (result.IsValid && result.Redirect) {
                 btnCreate.textContent = '✓ Создано!';
@@ -1136,15 +1140,21 @@ document.addEventListener('DOMContentLoaded', () => {
     topicsContainer.className = 'custom-topics-dropdown hidden';
     ticketSubject.parentNode.appendChild(topicsContainer);
 
-    ticketSubject.addEventListener('focus', () => {
-        if (topicsList.length > 0) showTopics(topicsList);
-    });
-
     ticketSubject.addEventListener('input', () => {
-        const val = ticketSubject.value.toLowerCase();
+        const val = ticketSubject.value.trim().toLowerCase();
+
+        if (val.length === 0) {
+            topicsContainer.classList.add('hidden');
+            return;
+        }
+
         const filtered = topicsList.filter(t => t.toLowerCase().includes(val));
-        if (filtered.length > 0) showTopics(filtered);
-        else topicsContainer.classList.add('hidden');
+
+        if (filtered.length > 0) {
+            showTopics(filtered);
+        } else {
+            topicsContainer.classList.add('hidden');
+        }
     });
 
     document.addEventListener('click', (e) => {
