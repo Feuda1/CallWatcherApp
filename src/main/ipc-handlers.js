@@ -1,4 +1,4 @@
-// Модуль IPC обработчиков
+
 
 const { app, ipcMain, session } = require('electron');
 const { autoUpdater } = require('electron-updater');
@@ -10,7 +10,7 @@ const tickets = require('./tickets');
 const windows = require('./windows');
 
 function setupIpcHandlers() {
-    // Получение данных
+
     ipcMain.handle('get-call-data', () => state.getLatestCallData());
     ipcMain.handle('get-call-history', () => state.getCallHistory());
 
@@ -35,31 +35,31 @@ function setupIpcHandlers() {
         return true;
     });
 
-    // Темы
+
     ipcMain.handle('get-topics', () => topics.getTopics());
     ipcMain.handle('save-topic', (event, topic) => topics.addTopic(topic));
 
-    // Поиск клиентов
+
     ipcMain.handle('search-clients', async (event, query) => {
         return await tickets.searchClients(query);
     });
 
-    // Создание заявки
+
     ipcMain.handle('create-ticket', async (event, data) => {
         return await tickets.createTicket(data);
     });
 
-    // Причины закрытия
+
     ipcMain.handle('get-ticket-reasons', async () => {
         return await tickets.getTicketReasons();
     });
 
-    // Закрытие заявки
+
     ipcMain.handle('close-ticket', async (event, params) => {
         return await tickets.closeTicket(params);
     });
 
-    // Аудио
+
     ipcMain.handle('get-audio', async (event, url) => {
         try {
             const ses = session.defaultSession;
@@ -83,7 +83,7 @@ function setupIpcHandlers() {
         }
     });
 
-    // Управление окном
+
     ipcMain.on('window-minimize', () => {
         const mainWindow = state.getMainWindow();
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -109,7 +109,7 @@ function setupIpcHandlers() {
         }
     });
 
-    // Авторизация
+
     ipcMain.on('open-login', () => {
         windows.openLoginWindow(() => calls.restoreHistoryFromServer());
     });
@@ -132,7 +132,7 @@ function setupIpcHandlers() {
         setTimeout(() => calls.checkCalls(), 1000);
     });
 
-    // Блокировка звонка
+
     ipcMain.on('lock-call', (event, callId) => {
         state.setIsCallLocked(true);
         state.setLockedCallId(callId);
@@ -145,7 +145,7 @@ function setupIpcHandlers() {
         console.log('[CallWatcher] Звонок разблокирован');
     });
 
-    // Пропуск звонка
+
     ipcMain.on('skip-call', (event, callId) => {
         windows.hideNotification();
 
@@ -188,18 +188,22 @@ function setupIpcHandlers() {
         state.setLockedCallId(null);
     });
 
-    // Заявка создана
-    ipcMain.on('ticket-created', (event, callId) => {
+
+    ipcMain.on('ticket-created', (event, callId, ticketUrl) => {
         const callHistory = state.getCallHistory();
         const historyItem = callHistory.find(c => c.id === callId);
         const latestCallData = state.getLatestCallData();
 
         if (historyItem) {
             historyItem.status = 'created';
+            historyItem.ticketUrl = ticketUrl;
             historyItem.updatedAt = new Date().toLocaleString('ru-RU');
         } else if (latestCallData && latestCallData.id === callId) {
+            if (ticketUrl) latestCallData.ticketUrl = ticketUrl;
             history.addToHistory(latestCallData, 'created');
         }
+
+        history.saveHistory();
 
         state.getShownCallIds().add(callId);
 
@@ -219,7 +223,7 @@ function setupIpcHandlers() {
         calls.checkCalls();
     });
 
-    // Заполнить заявку
+
     ipcMain.on('fill-ticket', () => {
         windows.hideNotification();
         const latestCallData = state.getLatestCallData();
@@ -237,7 +241,7 @@ function setupIpcHandlers() {
         }
     });
 
-    // Обновление черновика
+
     ipcMain.on('update-call-draft', (event, callId, draft) => {
         const callHistory = state.getCallHistory();
         const item = callHistory.find(c => c.id === callId);
@@ -251,12 +255,12 @@ function setupIpcHandlers() {
         }
     });
 
-    // Открыть в браузере
+
     ipcMain.on('open-ticket-browser', (event, callData, clientId) => {
         tickets.openTicketInBrowser(callData, clientId);
     });
 
-    // Тестовое уведомление
+
     ipcMain.on('test-notification', () => {
         const testData = {
             id: 'test-' + Date.now(),
@@ -268,7 +272,7 @@ function setupIpcHandlers() {
         windows.showNotification(testData);
     });
 
-    // Обновление приложения
+
     ipcMain.on('restart_app', () => {
         autoUpdater.quitAndInstall();
     });

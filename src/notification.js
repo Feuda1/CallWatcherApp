@@ -3,15 +3,15 @@ function log(msg) {
     console.log('[Notification]', msg);
 }
 
-log('Script loaded');
+log('Скрипт загружен');
 
 if (!window.api) {
-    log('ERROR: window.api is missing!');
+    log('ОШИБКА: window.api отсутствует!');
     document.body.innerHTML += '<h2 style="color:red; background:white; padding:10px;">Ошибка API: Preload не загружен</h2>';
 }
 
 function updateUI(data) {
-    log('Updating UI with: ' + JSON.stringify(data));
+    log('Обновление интерфейса: ' + JSON.stringify(data));
     if (data) {
         const phone = data.phone || 'Неизвестный';
         document.getElementById('phone').textContent = phone;
@@ -36,31 +36,31 @@ function updateUI(data) {
             audioContainer.style.display = 'none';
         }
     } else {
-        log('Received null data');
+        log('Получены пустые данные');
     }
 }
 
 
 document.addEventListener('DOMContentLoaded', () => {
-    log('DOM Ready');
+    log('DOM готов');
 
     if (window.api) {
         window.api.onCallData((data) => {
-            log('Event: call-data received');
+            log('Событие: call-data получено');
             updateUI(data);
         });
 
         window.api.getCallData().then(data => {
-            log('Promise: getCallData result');
+            log('Промис: результат getCallData');
             updateUI(data);
         }).catch(err => {
-            log('Error getting call data: ' + err);
+            log('Ошибка получения данных звонка: ' + err);
         });
 
         const btnFill = document.getElementById('btn-fill');
         if (btnFill) {
             btnFill.addEventListener('click', () => {
-                log('Button: Fill clicked');
+                log('Кнопка: Заполнить нажата');
                 window.api.fillTicket();
             });
         }
@@ -68,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const btnSkip = document.getElementById('btn-skip');
         if (btnSkip) {
             btnSkip.addEventListener('click', () => {
-                log('Button: Skip clicked');
+                log('Кнопка: Пропустить нажата');
                 window.api.skipCall();
                 window.close();
             });

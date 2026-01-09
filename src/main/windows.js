@@ -1,4 +1,4 @@
-// Модуль управления окнами приложения
+
 
 const { BrowserWindow, screen } = require('electron');
 const path = require('path');

@@ -1,4 +1,4 @@
-// Модуль UI для работы с тикетами (причины закрытия, валидация)
+
 
 const ticketUI = {
     closeAfterCreateCheckbox: null,
@@ -9,7 +9,7 @@ const ticketUI = {
     btnCreate: null,
     ticketSubject: null,
 
-    // Custom select
+
     customSelectContainer: null,
     customSelectTrigger: null,
     customSelectText: null,
@@ -17,13 +17,13 @@ const ticketUI = {
     customSelectSearch: null,
     customSelectList: null,
 
-    // Данные
+
     allTicketReasons: [],
     reasonsLoaded: false,
     isLoadingReasons: false,
     selectedReasonIds: new Set(),
 
-    // Callbacks
+
     onValidationChange: null,
     getSelectedClientId: null,
 
@@ -65,17 +65,17 @@ const ticketUI = {
             this.ticketSubject.addEventListener('input', () => this.validate());
         }
 
-        // Custom select trigger
+
         this.customSelectTrigger?.addEventListener('click', () => {
             this.toggleDropdown();
         });
 
-        // Search in dropdown
+
         this.customSelectSearch?.addEventListener('input', () => {
             this.renderOptions(this.allTicketReasons);
         });
 
-        // Close dropdown on outside click
+
         document.addEventListener('click', (e) => {
             if (this.customSelectContainer && !this.customSelectContainer.contains(e.target)) {
                 this.toggleDropdown(false);
@@ -84,7 +84,7 @@ const ticketUI = {
 
         if (this.closeReasonSelect) {
             this.closeReasonSelect.addEventListener('change', () => {
-                // For compatibility
+
             });
         }
     },
@@ -177,7 +177,7 @@ const ticketUI = {
         if (shouldOpen) {
             this.customSelectDropdown.classList.remove('hidden');
 
-            // Adaptive positioning
+
             const rect = this.customSelectContainer.getBoundingClientRect();
             const spaceBelow = window.innerHeight - rect.bottom;
             const spaceAbove = rect.top;

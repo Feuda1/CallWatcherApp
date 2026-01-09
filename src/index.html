@@ -73,6 +73,27 @@
 
 
                 <div class="section-label">ИСТОРИЯ</div>
+
+
+                <div class="history-search-container">
+                    <input type="text" id="history-search" class="history-search-input"
+                        placeholder="Поиск по номеру...">
+                </div>
+
+
+                <div class="history-filter-tabs">
+                    <button class="filter-tab active" data-filter="all">Все</button>
+                    <button class="filter-tab" data-filter="unprocessed">
+                        <span class="tab-dot pending"></span>Ожидают
+                    </button>
+                    <button class="filter-tab" data-filter="created">
+                        <span class="tab-dot success"></span>Созданы
+                    </button>
+                    <button class="filter-tab" data-filter="skipped">
+                        <span class="tab-dot skipped"></span>Пропущены
+                    </button>
+                </div>
+
                 <ul id="history-list" class="history-list">
 
                 </ul>
@@ -324,7 +345,7 @@
         <div id="main-panel"></div>
     </div>
 
-    <!-- Модули renderer -->
+
     <script src="renderer/modules/audio.js"></script>
     <script src="renderer/modules/filters.js"></script>
     <script src="renderer/modules/date-picker.js"></script>
@@ -333,7 +354,7 @@
     <script src="renderer/modules/ticket-ui.js"></script>
     <script src="renderer/modules/topics-ui.js"></script>
 
-    <!-- Главный модуль -->
+
     <script src="renderer/app.js"></script>
 </body>
 

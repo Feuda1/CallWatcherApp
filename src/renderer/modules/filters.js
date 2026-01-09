@@ -1,4 +1,4 @@
-// Модуль управления фильтрами
+
 
 const filters = {
     minDuration: 0,
@@ -6,14 +6,14 @@ const filters = {
     allBulkCalls: [],
     bulkCalls: [],
 
-    // DOM элементы
+
     durationSlider: null,
     durationSliderInline: null,
     durationValueEl: null,
     durationValueInline: null,
     presetBtns: null,
 
-    // Callbacks
+
     onFiltersChanged: null,
 
     init(onFiltersChangedCallback) {
@@ -109,7 +109,7 @@ const filters = {
         return this.minDuration;
     },
 
-    // Методы для работы с датами
+
     toggleDate(date) {
         if (this.selectedDates.has(date)) {
             this.selectedDates.delete(date);

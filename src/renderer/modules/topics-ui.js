@@ -1,4 +1,4 @@
-// Модуль UI для работы с темами заявок
+
 
 const topicsUI = {
     ticketSubject: null,
@@ -24,7 +24,7 @@ const topicsUI = {
             });
         }
 
-        // Закрытие при клике вне
+
         document.addEventListener('click', (e) => {
             if (this.ticketSubject && this.topicsContainer) {
                 if (!this.ticketSubject.contains(e.target) && !this.topicsContainer.contains(e.target)) {
@@ -56,7 +56,7 @@ const topicsUI = {
                     this.ticketSubject.value = topic;
                     this.topicsContainer.classList.add('hidden');
 
-                    // Trigger validation
+
                     this.ticketSubject.dispatchEvent(new Event('input'));
                 }
             });

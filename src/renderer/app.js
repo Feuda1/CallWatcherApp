@@ -719,7 +719,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
                 if (data.draft) {
-                    console.log('Restoring draft for call:', data.id);
+                    console.log('Восстановление черновика для звонка:', data.id);
                     ticketSubject.value = data.draft.subject || '';
                     ticketDesc.value = data.draft.description || '';
                     clientSearch.value = data.draft.searchQuery || '';
@@ -1058,17 +1058,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 setTimeout(() => {
                     currentCallData = null;
                     showCallData(null);
-                    window.api.ticketCreated(completedCallId);
+                    window.api.ticketCreated(completedCallId, result.TicketUrl);
                     btnCreate.textContent = 'Создать заявку';
                     btnCreate.disabled = true;
 
                     if (currentMode === 'bulk') {
-                        currentMode = 'incoming';
-                        modeTabs.forEach(t => {
-                            t.classList.toggle('active', t.dataset.mode === 'incoming');
-                        });
-                        bulkStatsEl?.classList.add('hidden');
-                        bulkNavEl?.classList.add('hidden');
+                        loadBulkCalls();
+                    } else {
+                        loadHistory();
                     }
                 }, 1500);
             } else {
@@ -1088,98 +1085,241 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentCallData) {
             window.api.skipCall(currentCallData.id);
         }
+        if (window.audioModule) {
+            window.audioModule.hide();
+        }
         showCallData(null);
     });
 
-    async function loadHistory() {
-        if (!historyList) return;
-        const calls = await window.api.getCallHistory() || [];
-        callHistory = calls;
 
-        if (calls.length === 0) {
+    let currentHistoryFilter = 'all';
+    let historySearchQuery = '';
+    const historySearchInput = document.getElementById('history-search');
+    const filterTabs = document.querySelectorAll('.filter-tab');
+
+
+    filterTabs.forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('[CallWatcher] Клик по табу:', tab.dataset.filter);
+            filterTabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            currentHistoryFilter = tab.dataset.filter;
+            renderFilteredHistory();
+        });
+    });
+    console.log('[CallWatcher] Инициализировано табов:', filterTabs.length);
+
+
+    if (historySearchInput) {
+        historySearchInput.addEventListener('input', () => {
+            historySearchQuery = historySearchInput.value.toLowerCase().trim();
+            renderFilteredHistory();
+        });
+    }
+
+
+    function parseHistoryDate(dateStr) {
+        if (!dateStr) return null;
+        const match = dateStr.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+        if (!match) return null;
+        return {
+            day: match[1],
+            month: match[2],
+            year: match[3],
+            formatted: `${match[1]}.${match[2]}.${match[3]}`
+        };
+    }
+
+
+    function getDateLabel(dateStr) {
+        const parsed = parseHistoryDate(dateStr);
+        if (!parsed) return 'Без даты';
+
+        const today = new Date();
+        const todayStr = `${String(today.getDate()).padStart(2, '0')}.${String(today.getMonth() + 1).padStart(2, '0')}.${today.getFullYear()}`;
+
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = `${String(yesterday.getDate()).padStart(2, '0')}.${String(yesterday.getMonth() + 1).padStart(2, '0')}.${yesterday.getFullYear()}`;
+
+        if (parsed.formatted === todayStr) return 'Сегодня';
+        if (parsed.formatted === yesterdayStr) return 'Вчера';
+        return parsed.formatted;
+    }
+
+
+    function formatDuration(seconds) {
+        const sec = parseInt(seconds) || 0;
+        if (sec < 60) return `${sec}с`;
+        const min = Math.floor(sec / 60);
+        const remSec = sec % 60;
+        return remSec > 0 ? `${min}м ${remSec}с` : `${min}м`;
+    }
+
+
+    function extractTime(dateStr) {
+        if (!dateStr) return '';
+        const match = dateStr.match(/(\d{2}:\d{2})/);
+        return match ? match[1] : '';
+    }
+
+
+    function renderFilteredHistory() {
+        if (!historyList) return;
+
+        let filtered = callHistory;
+
+
+        if (currentHistoryFilter !== 'all') {
+            filtered = filtered.filter(c => c.status === currentHistoryFilter);
+        }
+
+
+        if (historySearchQuery) {
+            filtered = filtered.filter(c =>
+                (c.phone || '').toLowerCase().includes(historySearchQuery)
+            );
+        }
+
+        if (filtered.length === 0) {
             historyList.innerHTML = '';
             historyEmpty.classList.remove('hidden');
+            historyEmpty.textContent = historySearchQuery ? 'Ничего не найдено' : 'Нет звонков';
             return;
         }
 
         historyEmpty.classList.add('hidden');
+        historyList.innerHTML = '';
 
-        const updateOrCreateItem = (call, existingEl) => {
-            let li = existingEl;
-            let statusClass = 'status-unprocessed';
-            let statusText = 'ОЖИДАЕТ';
 
-            if (call.status === 'created') {
-                statusClass = 'status-created';
-                statusText = 'СОЗДАН';
-            } else if (call.status === 'skipped') {
-                statusClass = 'status-skipped';
-                statusText = 'ПРОПУЩЕН';
+        const groups = new Map();
+        filtered.forEach(call => {
+            const label = getDateLabel(call.date);
+            if (!groups.has(label)) {
+                groups.set(label, []);
             }
+            groups.get(label).push(call);
+        });
 
-            const phone = escapeHtml(call.phone || 'Неизвестный');
-            const date = call.date || '';
 
-            const innerHTML = `
-                <div class="history-phone">${phone}</div>
-                <div class="history-meta">
-                    <div>${date}</div>
-                    <span class="history-status-badge ${statusClass}">${statusText}</span>
-                </div>
-            `;
+        groups.forEach((calls, dateLabel) => {
 
-            if (!li) {
-                li = document.createElement('li');
-                li.className = 'history-item';
-                li.dataset.id = call.id;
-                li.addEventListener('click', () => {
-                    const freshCall = callHistory.find(c => c.id === call.id);
-                    if (freshCall) {
-                        showCallData(freshCall);
-                        window.api.lockCall(freshCall.id);
-                    }
-                });
-                li.innerHTML = innerHTML;
-            } else {
-                if (li.innerHTML !== innerHTML) {
-                    li.innerHTML = innerHTML;
-                }
-            }
+            const separator = document.createElement('li');
+            separator.className = 'history-date-separator';
+            separator.textContent = dateLabel;
+            historyList.appendChild(separator);
 
-            if (currentCallData && call.id === currentCallData.id) {
-                li.classList.add('selected');
-            } else {
-                li.classList.remove('selected');
-            }
 
-            return li;
-        };
+            calls.forEach(call => {
+                const li = createHistoryItem(call);
+                historyList.appendChild(li);
+            });
+        });
+    }
 
-        const existingItems = Array.from(historyList.querySelectorAll('.history-item'));
-        const existingMap = new Map();
-        existingItems.forEach(el => existingMap.set(el.dataset.id, el));
-        calls.forEach((call, index) => {
-            const existingEl = existingMap.get(call.id);
-            const li = updateOrCreateItem(call, existingEl);
 
-            if (!existingEl) {
-                if (index === 0) {
-                    historyList.prepend(li);
-                } else {
-                    const prevCall = calls[index - 1];
-                    const prevEl = historyList.querySelector(`.history-item[data-id="${prevCall.id}"]`);
-                    if (prevEl) {
-                        prevEl.after(li);
-                    } else {
-                        historyList.appendChild(li);
-                    }
-                }
-            } else {
-                existingMap.delete(call.id);
+    function createHistoryItem(call) {
+        const li = document.createElement('li');
+        li.className = 'history-item';
+        li.dataset.id = call.id;
+        li.dataset.status = call.status || 'unprocessed';
+
+        let statusClass = 'status-unprocessed';
+        let statusText = 'ОЖИДАЕТ';
+
+        if (call.status === 'created') {
+            statusClass = 'status-created';
+            statusText = 'СОЗДАН';
+        } else if (call.status === 'skipped') {
+            statusClass = 'status-skipped';
+            statusText = 'ПРОПУЩЕН';
+        }
+
+        const phone = escapeHtml(call.phone || 'Неизвестный');
+        const duration = formatDuration(call.duration);
+        const time = extractTime(call.date);
+
+        li.innerHTML = `
+            <div class="history-top-row">
+                <span class="history-phone">${phone}</span>
+                <span class="history-duration">
+                    <span class="history-duration-icon">⏱</span>${duration}
+                </span>
+            </div>
+            <div class="history-bottom-row">
+                <span class="history-time">${time}</span>
+                <span class="history-status-badge ${statusClass}">${statusText}</span>
+            </div>
+        `;
+
+        li.addEventListener('click', () => {
+            const freshCall = callHistory.find(c => c.id === call.id);
+            if (freshCall) {
+                showCallData(freshCall);
+                window.api.lockCall(freshCall.id);
             }
         });
 
-        existingMap.forEach(el => el.remove());
+        if (currentCallData && call.id === currentCallData.id) {
+            li.classList.add('selected');
+        }
+
+        return li;
+    }
+
+    async function loadHistory() {
+        if (!historyList) return;
+
+
+        const localHistory = await window.api.getCallHistory() || [];
+        const localDataMap = new Map();
+        localHistory.forEach(c => {
+            localDataMap.set(c.id, {
+                status: c.status,
+                ticketUrl: c.ticketUrl
+            });
+        });
+
+
+        if (callHistory.length === 0 && localHistory.length > 0) {
+            callHistory = [...localHistory];
+            renderFilteredHistory();
+        }
+
+
+        const allCalls = await window.api.getAllCalls() || [];
+
+
+        callHistory = allCalls.map(call => {
+            const local = localDataMap.get(call.id);
+            return {
+                ...call,
+                status: local?.status || (call.hasTicket ? 'created' : 'unprocessed'),
+                ticketUrl: local?.ticketUrl
+            };
+        });
+
+
+        localHistory.forEach(local => {
+            if (!callHistory.find(c => c.id === local.id)) {
+                callHistory.push(local);
+            }
+        });
+
+
+        callHistory.sort((a, b) => {
+            const parseDate = (d) => {
+                if (!d) return 0;
+                const match = d.match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})/);
+                if (!match) return 0;
+                return new Date(`${match[3]}-${match[2]}-${match[1]}T${match[4]}:${match[5]}`).getTime();
+            };
+            return parseDate(b.date) - parseDate(a.date);
+        });
+
+        renderFilteredHistory();
     }
 
     function saveDraft() {
@@ -1246,12 +1386,12 @@ document.addEventListener('DOMContentLoaded', () => {
     initVersion();
 
     window.api.onUpdateAvailable((info) => {
-        console.log('Update available:', info);
+        console.log('Обновление доступно:', info);
         if (appVersionEl) appVersionEl.textContent = `Обновление... v${info.version}`;
     });
 
     window.api.onUpdateDownloaded((info) => {
-        console.log('Update downloaded:', info);
+        console.log('Обновление загружено:', info);
         if (appVersionEl) {
             appVersionEl.textContent = `Перезапуск для v${info.version}`;
             appVersionEl.style.cursor = 'pointer';
@@ -1261,12 +1401,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.api.onUpdateError((err) => {
-        console.error('Update error:', err);
+        console.error('Ошибка обновления:', err);
         if (appVersionEl) {
             const originalText = appVersionEl.textContent;
-
             appVersionEl.textContent = `Обновлений не найдено`;
-
             setTimeout(() => {
                 initVersion();
             }, 10000);
@@ -1323,8 +1461,32 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     initTopics();
 
-    window.api.onCallData(showCallData);
     window.api.onCallHistory(() => loadHistory());
+    let lastIncomingId = null;
+
+    window.api.onCallData((data) => {
+
+
+        let shouldShow = false;
+
+        if (!currentCallData) {
+            shouldShow = true;
+        } else if (data && currentCallData.id === data.id) {
+            shouldShow = true;
+        } else if (data && data.id !== lastIncomingId) {
+            shouldShow = true;
+        }
+
+        if (data) {
+            lastIncomingId = data.id;
+        }
+
+        if (shouldShow) {
+            showCallData(data);
+        }
+
+        loadHistory();
+    });
     window.api.getCallData().then(showCallData);
     loadHistory();
 

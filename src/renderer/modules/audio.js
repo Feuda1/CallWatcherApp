@@ -1,4 +1,4 @@
-// Модуль управления аудиоплеером
+
 
 const audio = {
     callAudio: null,
@@ -167,5 +167,5 @@ const audio = {
     }
 };
 
-// Экспорт для использования в app.js
+
 window.audioModule = audio;

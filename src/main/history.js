@@ -1,4 +1,4 @@
-// Модуль управления историей звонков
+
 
 const { app } = require('electron');
 const path = require('path');
@@ -21,7 +21,21 @@ function loadHistory() {
         if (fs.existsSync(filePath)) {
             const data = fs.readFileSync(filePath, 'utf8');
             const parsed = JSON.parse(data);
-            const history = Array.isArray(parsed.history) ? parsed.history : [];
+            let history = Array.isArray(parsed.history) ? parsed.history : [];
+
+
+            const uniqueHistoryMap = new Map();
+            history.forEach(item => {
+                if (item && item.id) {
+                    uniqueHistoryMap.set(item.id, item);
+                }
+            });
+            history = Array.from(uniqueHistoryMap.values());
+
+
+            if (history.length > 250) {
+                history = history.slice(0, 250);
+            }
             state.setCallHistory(history);
 
             const shownCallIds = state.getShownCallIds();
@@ -71,7 +85,7 @@ function addToHistory(callData, status) {
             status: status,
             addedAt: new Date().toLocaleString('ru-RU')
         });
-        if (callHistory.length > 100) callHistory.pop();
+        if (callHistory.length > 250) callHistory.pop();
     }
 
     const mainWindow = state.getMainWindow();

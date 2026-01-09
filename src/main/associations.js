@@ -1,5 +1,3 @@
-// Модуль управления ассоциациями клиентов с телефонами
-
 const { app } = require('electron');
 const path = require('path');
 const fs = require('fs');

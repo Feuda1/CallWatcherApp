@@ -1,4 +1,4 @@
-// Модуль работы с клиентами (поиск, выбор, отображение)
+
 
 const clients = {
     clientSearch: null,
@@ -12,7 +12,7 @@ const clients = {
     selectedClientObject: null,
     searchTimeout: null,
 
-    // Callbacks
+
     onClientSelected: null,
 
     init(onClientSelectedCallback) {
@@ -180,12 +180,12 @@ const clients = {
         this.selectedClientId = client.Id || client.id;
         this.selectedClientObject = client;
 
-        // Убираем выделение со всех
+
         document.querySelectorAll('.client-item.selected').forEach(el => {
             el.classList.remove('selected');
         });
 
-        // Выделяем текущий
+
         if (element) {
             element.classList.add('selected');
         }

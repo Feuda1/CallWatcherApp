@@ -1,4 +1,4 @@
-// Модуль режима массового просмотра звонков
+
 
 const bulkMode = {
     bulkCalls: [],
@@ -6,7 +6,7 @@ const bulkMode = {
     bulkStats: { total: 0, filled: 0, unfilled: 0 },
     bulkFirstLoad: true,
 
-    // DOM элементы
+
     bulkStatsEl: null,
     bulkNavEl: null,
     bulkFilterEl: null,
@@ -20,7 +20,7 @@ const bulkMode = {
     btnLastCall: null,
     btnRefreshBulk: null,
 
-    // Callbacks
+
     onShowCall: null,
     filtersModule: null,
 
@@ -79,7 +79,7 @@ const bulkMode = {
             this.btnRefreshBulk.classList.remove('loading');
         });
 
-        // Подписка на прогресс загрузки
+
         if (window.api.onBulkProgress) {
             window.api.onBulkProgress((count) => {
                 if (this.statTotal) this.statTotal.textContent = count;
@@ -105,16 +105,33 @@ const bulkMode = {
         }
 
         if (needsRefresh || this.filtersModule.allBulkCalls.length === 0) {
+
+            const currentCallId = this.bulkCalls[this.bulkIndex]?.id;
+
             const allCalls = await window.api.getAllCalls(needsRefresh);
             const unfilledCalls = allCalls.filter(c => !c.hasTicket);
             this.filtersModule.setAllCalls(unfilledCalls);
 
-            // Применяем фильтры
+
             this.bulkCalls = unfilledCalls.filter(c => {
                 const dur = parseInt(c.duration) || 0;
                 return dur >= this.filtersModule.getMinDuration();
             });
-            this.bulkIndex = 0;
+
+
+            if (currentCallId) {
+                const newIndex = this.bulkCalls.findIndex(c => c.id === currentCallId);
+                if (newIndex !== -1) {
+                    this.bulkIndex = newIndex;
+                } else {
+
+                    if (this.bulkIndex >= this.bulkCalls.length) {
+                        this.bulkIndex = Math.max(0, this.bulkCalls.length - 1);
+                    }
+                }
+            } else {
+                this.bulkIndex = 0;
+            }
         }
 
         const stats = await window.api.getBulkStats();

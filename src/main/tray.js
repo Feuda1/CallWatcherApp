@@ -1,11 +1,11 @@
-// Модуль управления системным треем
+
 
 const { app, Tray, Menu } = require('electron');
 const path = require('path');
 const state = require('./state');
 
 function createTray() {
-    const tray = new Tray(path.join(__dirname, '../../assets', 'icon.png'));
+    const tray = new Tray(path.join(__dirname, '../../assets', 'icon.ico'));
 
     const contextMenu = Menu.buildFromTemplate([
         {

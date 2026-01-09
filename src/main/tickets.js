@@ -1,4 +1,4 @@
-// Модуль работы с тикетами (заявками)
+
 
 const { app, session, shell } = require('electron');
 const path = require('path');
@@ -6,7 +6,7 @@ const fs = require('fs');
 const state = require('./state');
 const associations = require('./associations');
 
-// Декодирование HTML-сущностей
+
 function decodeHtmlEntities(text) {
     if (!text) return text;
     return text.replace(/&#x([0-9A-F]+);/gi, (match, hex) => String.fromCharCode(parseInt(hex, 16)))
@@ -18,7 +18,7 @@ function decodeHtmlEntities(text) {
         .replace(/&apos;/g, "'");
 }
 
-// Поиск клиентов
+
 async function searchClients(query) {
     try {
 
@@ -46,7 +46,7 @@ async function searchClients(query) {
     }
 }
 
-// Создание заявки
+
 async function createTicket({ callData, clientId, clientName, subject, description }) {
     try {
 
@@ -155,7 +155,13 @@ async function createTicket({ callData, clientId, clientName, subject, descripti
             if (responseText.includes('/Tickets/Details/')) {
                 const detailsMatch = responseText.match(/\/Tickets\/Details\/(\d+)/);
                 if (detailsMatch) {
-                    result = { IsValid: true, Redirect: true, Address: `/Tickets/Details/${detailsMatch[1]}` };
+                    result = {
+                        IsValid: true,
+                        Redirect: true,
+                        Address: `/Tickets/Details/${detailsMatch[1]}`,
+                        TicketId: detailsMatch[1],
+                        TicketUrl: `https://clients.denvic.ru/Tickets/Details/${detailsMatch[1]}`
+                    };
                 } else {
                     result = { IsValid: false, Error: 'Не удалось определить результат создания' };
                 }
@@ -177,7 +183,7 @@ async function createTicket({ callData, clientId, clientName, subject, descripti
     }
 }
 
-// Получение причин закрытия
+
 async function getTicketReasons() {
     const cached = state.getCachedReasons();
     if (cached && cached.length > 0) {
@@ -235,7 +241,7 @@ async function getTicketReasons() {
     }
 }
 
-// Закрытие заявки
+
 async function closeTicket(params) {
     try {
         let { ticketId, reasonId, reasonIds, comment, timeSpent } = params;
@@ -409,10 +415,15 @@ async function closeTicket(params) {
     }
 }
 
-// Открыть заявку в браузере
+
 function openTicketInBrowser(callData, clientId) {
     if (!callData) {
         console.error('[CallWatcher] Нет данных звонка для открытия в браузере');
+        return;
+    }
+
+    if (callData.ticketUrl) {
+        shell.openExternal(callData.ticketUrl);
         return;
     }
 

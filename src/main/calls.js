@@ -1,4 +1,4 @@
-// Модуль парсинга и polling звонков
+
 
 const { session } = require('electron');
 const state = require('./state');
@@ -6,7 +6,7 @@ const history = require('./history');
 const associations = require('./associations');
 const auth = require('./auth');
 
-// Парсинг данных звонка из HTML
+
 function parseCallData(html) {
     const allLinksRegex = /href="\/Tickets\/Create\?([^"]+)"/g;
     const allLinkMatches = [...html.matchAll(allLinksRegex)];
@@ -65,7 +65,7 @@ function parseCallData(html) {
     };
 }
 
-// Парсинг всех звонков со страницы
+
 function parseAllCallsFromPage(html) {
     const calls = [];
     const foundIds = new Set();
@@ -137,7 +137,7 @@ function parseAllCallsFromPage(html) {
         });
     }
 
-    // Парсинг аудио-линков для legacy звонков
+
     const audioLinkRegex = /GetCallRecord\?id=([^"&\s]+)/g;
     const audioMatches = [...html.matchAll(audioLinkRegex)];
 
@@ -234,7 +234,7 @@ function parseAllCallsFromPage(html) {
     return calls;
 }
 
-// Загрузка всех звонков (пагинация)
+
 async function fetchAllCalls(forceRefresh = false, emitProgress = true) {
     const bulkCallsCache = state.getBulkCallsCache();
 
@@ -255,32 +255,61 @@ async function fetchAllCalls(forceRefresh = false, emitProgress = true) {
         let hasMore = true;
 
         try {
-            while (hasMore && page <= MAX_PAGES) {
-                const url = `https://clients.denvic.ru/PhoneCalls?onlyMy=true&page=${page}`;
+            const BATCH_SIZE = 5;
 
-                const response = await ses.fetch(url, { credentials: 'include' });
+            for (let batchStart = 1; batchStart <= MAX_PAGES; batchStart += BATCH_SIZE) {
+                const promises = [];
+                for (let i = 0; i < BATCH_SIZE; i++) {
+                    const pageNum = batchStart + i;
+                    if (pageNum > MAX_PAGES) break;
 
-                if (!response.ok || response.url.includes('Login')) {
-                    if (page === 1) return [];
-                    break;
+                    const p = (async () => {
+                        try {
+                            const url = `https://clients.denvic.ru/PhoneCalls?onlyMy=true&page=${pageNum}`;
+                            const response = await ses.fetch(url, { credentials: 'include' });
+
+                            if (!response.ok || response.url.includes('Login')) {
+                                return { page: pageNum, calls: [], error: true };
+                            }
+
+                            const html = await response.text();
+                            const pageCalls = parseAllCallsFromPage(html);
+                            return { page: pageNum, calls: pageCalls, error: false };
+                        } catch (e) {
+                            console.error(`Ошибка загрузки страницы ${pageNum}:`, e);
+                            return { page: pageNum, calls: [], error: true };
+                        }
+                    })();
+                    promises.push(p);
                 }
 
-                const html = await response.text();
-                const pageCalls = parseAllCallsFromPage(html);
+                const results = await Promise.all(promises);
 
-                if (pageCalls.length === 0) {
-                    hasMore = false;
-                } else {
-                    const newCalls = pageCalls.filter(nc => !allCalls.find(ac => ac.id === nc.id));
-                    allCalls.push(...newCalls);
 
-                    const mainWindow = state.getMainWindow();
-                    if (mainWindow && !mainWindow.isDestroyed() && emitProgress) {
-                        mainWindow.webContents.send('bulk-progress', allCalls.length);
+                results.sort((a, b) => a.page - b.page);
+
+                let stopLoading = false;
+                for (const res of results) {
+                    if (res.error) {
+
+                        if (res.page === 1) stopLoading = true;
                     }
 
-                    page++;
+                    if (res.calls.length === 0) {
+
+                        stopLoading = true;
+                    } else {
+                        const newCalls = res.calls.filter(nc => !allCalls.find(ac => ac.id === nc.id));
+                        allCalls.push(...newCalls);
+                    }
                 }
+
+                const mainWindow = state.getMainWindow();
+                if (mainWindow && !mainWindow.isDestroyed() && emitProgress) {
+                    mainWindow.webContents.send('bulk-progress', allCalls.length);
+                }
+
+                if (stopLoading) break;
             }
 
 
@@ -301,7 +330,7 @@ async function fetchAllCalls(forceRefresh = false, emitProgress = true) {
     return fetchPromise;
 }
 
-// Восстановление истории с сервера
+
 async function restoreHistoryFromServer() {
     try {
         const serverCalls = await fetchAllCalls(true, false);
@@ -340,7 +369,7 @@ async function restoreHistoryFromServer() {
                 return parseDate(b.date) - parseDate(a.date);
             });
 
-            state.setCallHistory(uniqueHistory.length > 100 ? uniqueHistory.slice(0, 100) : uniqueHistory);
+            state.setCallHistory(uniqueHistory.length > 250 ? uniqueHistory.slice(0, 250) : uniqueHistory);
 
             console.log(`[CallWatcher] Восстановлено ${addedCount} звонков. Всего в истории: ${state.getCallHistory().length}`);
             history.saveHistory();
@@ -361,7 +390,7 @@ async function restoreHistoryFromServer() {
     }
 }
 
-// Проверка звонков (polling)
+
 async function checkCalls() {
     const windows = require('./windows');
 
@@ -438,9 +467,9 @@ async function checkCalls() {
             return;
         }
 
-        if (!state.getIsLoggedIn()) {
-            auth.saveAuthState(true);
 
+        if (!state.getIsLoggedIn() || state.getIsFirstPoll()) {
+            auth.saveAuthState(true);
             if (mainWindow && !mainWindow.isDestroyed()) {
                 mainWindow.webContents.send('login-status', true);
             }
@@ -516,7 +545,7 @@ async function checkCalls() {
     }
 }
 
-// Запуск polling
+
 function startPolling() {
     if (state.getIsPolling()) return;
     state.setIsPolling(true);
@@ -527,7 +556,7 @@ function startPolling() {
     console.log('[CallWatcher] Опрос начат');
 }
 
-// Остановка polling
+
 function stopPolling() {
     const interval = state.getPollInterval();
     if (interval) {

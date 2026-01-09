@@ -1,4 +1,4 @@
-// Модуль DatePicker для выбора дат
+
 
 const datePicker = {
     btnDatePicker: null,
@@ -7,7 +7,7 @@ const datePicker = {
     datePickerLabel: null,
     btnClearDate: null,
 
-    // Ссылка на модуль фильтров
+
     filtersModule: null,
 
     init(filtersModuleRef) {

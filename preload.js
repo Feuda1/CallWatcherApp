@@ -17,7 +17,7 @@ contextBridge.exposeInMainWorld('api', {
 
     fillTicket: () => ipcRenderer.send('fill-ticket'),
     skipCall: (id) => ipcRenderer.send('skip-call', id),
-    ticketCreated: (callId) => ipcRenderer.send('ticket-created', callId),
+    ticketCreated: (callId, ticketUrl) => ipcRenderer.send('ticket-created', callId, ticketUrl),
     openLogin: () => ipcRenderer.send('open-login'),
     logout: () => ipcRenderer.send('logout'),
 
