@@ -44,5 +44,8 @@ contextBridge.exposeInMainWorld('api', {
     minimizeWindow: () => ipcRenderer.send('window-minimize'),
     maximizeWindow: () => ipcRenderer.send('window-maximize'),
     closeWindow: () => ipcRenderer.send('window-close'),
-    openTicketInBrowser: (callData, clientId) => ipcRenderer.send('open-ticket-browser', callData, clientId)
+    openTicketInBrowser: (callData, clientId) => ipcRenderer.send('open-ticket-browser', callData, clientId),
+
+    getTicketReasons: () => ipcRenderer.invoke('get-ticket-reasons'),
+    closeTicket: (data) => ipcRenderer.invoke('close-ticket', data)
 });

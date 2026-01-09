@@ -28,6 +28,66 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusIndicator = document.getElementById('status-indicator');
     const appVersionEl = document.getElementById('app-version');
 
+    const closeAfterCreateCheckbox = document.getElementById('close-after-create');
+    const closeOptionsDiv = document.getElementById('close-options');
+
+    let allTicketReasons = [];
+    let reasonsLoaded = false;
+    let selectedReasonIds = new Set();
+    let isLoadingReasons = false;
+
+    const customSelectContainer = document.getElementById('close-reason-custom-container');
+    const customSelectTrigger = document.getElementById('close-reason-display');
+    const customSelectText = document.getElementById('close-reason-text');
+    const customSelectDropdown = document.getElementById('close-reason-dropdown');
+    const customSelectSearch = document.getElementById('close-reason-search');
+    const customSelectList = document.getElementById('close-reason-list');
+    const closeReasonSelect = document.getElementById('close-reason');
+    const closeCommentInput = document.getElementById('close-comment');
+    const closeTimeInput = document.getElementById('close-time');
+
+    function validateCreateButton() {
+        if (!selectedClientId) {
+            btnCreate.disabled = true;
+            btnCreate.title = 'Выберите клиента';
+            return;
+        }
+
+        const subject = ticketSubject ? ticketSubject.value.trim() : '';
+        if (!subject) {
+            btnCreate.disabled = true;
+            btnCreate.title = 'Укажите тему обращения';
+            return;
+        }
+
+        if (closeAfterCreateCheckbox && closeAfterCreateCheckbox.checked) {
+            if (selectedReasonIds.size === 0) {
+                btnCreate.disabled = true;
+                btnCreate.title = 'Выберите причину закрытия';
+                return;
+            }
+            const comment = closeCommentInput ? closeCommentInput.value.trim() : '';
+            if (!comment) {
+                btnCreate.disabled = true;
+                btnCreate.title = 'Напишите комментарий закрытия';
+                return;
+            }
+        }
+
+        btnCreate.disabled = false;
+        btnCreate.title = '';
+    }
+
+    if (closeAfterCreateCheckbox) {
+        closeAfterCreateCheckbox.addEventListener('change', validateCreateButton);
+    }
+    if (closeCommentInput) {
+        closeCommentInput.addEventListener('input', validateCreateButton);
+    }
+    if (ticketSubject) {
+        ticketSubject.addEventListener('input', validateCreateButton);
+    }
+
     const btnMinimize = document.getElementById('btn-minimize');
     const btnMaximize = document.getElementById('btn-maximize');
     const btnClose = document.getElementById('btn-close');
@@ -120,6 +180,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let callHistory = [];
     let isCallLocked = false;
     let draftTimeout = null;
+    let lastAudioRequestId = 0;
 
     let currentMode = 'incoming';
     let bulkCalls = [];
@@ -559,7 +620,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         if (playBtnWrapper) playBtnWrapper.classList.add('loading');
 
+                        const currentRequestId = ++lastAudioRequestId;
+
                         window.api.getAudio(audioUrl).then(result => {
+                            if (currentRequestId !== lastAudioRequestId) {
+                                console.log('Игнорирование устаревшего аудио ответа', currentRequestId);
+                                return;
+                            }
+
                             if (playBtnWrapper) playBtnWrapper.classList.remove('loading');
 
                             if (result && result.error) {
@@ -582,6 +650,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                 audioTimeTotal.textContent = 'Ошибка';
                             }
                         }).catch(err => {
+                            if (currentRequestId !== lastAudioRequestId) return;
+
                             if (playBtnWrapper) playBtnWrapper.classList.remove('loading');
                             console.error('Ошибка получения аудио:', err);
                             audioTimeTotal.textContent = 'Ошибка';
@@ -657,15 +727,43 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (data.draft.selectedClientId && data.draft.selectedClientObject) {
                         selectedClientId = data.draft.selectedClientId;
                         selectedClientObject = data.draft.selectedClientObject;
-                        btnCreate.disabled = false;
+                        selectedClientObject = data.draft.selectedClientObject;
                         setTimeout(() => highlightSelectedClient(selectedClientId), 100);
                     } else {
-                        btnCreate.disabled = true;
+                    }
+
+                    validateCreateButton();
+
+                    if (closeAfterCreateCheckbox) {
+                        closeAfterCreateCheckbox.checked = data.draft.closeAfterCreate || false;
+                        if (data.draft.closeAfterCreate) {
+                            closeOptionsDiv.classList.remove('hidden');
+                            ensureReasonsLoaded().then(() => {
+                                if (data.draft.multiCloseReasons && Array.isArray(data.draft.multiCloseReasons)) {
+                                    selectedReasonIds = new Set(data.draft.multiCloseReasons);
+                                } else if (data.draft.closeReason) {
+                                    selectedReasonIds = new Set([data.draft.closeReason]);
+                                }
+
+                                if (typeof updateCustomSelectUI === 'function') updateCustomSelectUI();
+                            });
+                        } else {
+                            closeOptionsDiv.classList.add('hidden');
+                        }
+                    }
+                    if (closeCommentInput) {
+                        closeCommentInput.value = data.draft.closeComment || '';
+                    }
+                    if (closeTimeInput) {
+                        closeTimeInput.value = data.draft.closeTime || '5';
                     }
                 } else if (data.associatedClient) {
                     selectedClientId = data.associatedClient.clientId;
                     selectedClientObject = finalSuggestions.find(s => (s.Id || s.id) === selectedClientId);
-                    btnCreate.disabled = false;
+                    selectedClientId = data.associatedClient.clientId;
+                    selectedClientObject = finalSuggestions.find(s => (s.Id || s.id) === selectedClientId);
+                    setTimeout(() => highlightSelectedClient(selectedClientId), 100);
+                    validateCreateButton();
                     setTimeout(() => highlightSelectedClient(selectedClientId), 100);
                 } else {
                     ticketSubject.value = '';
@@ -674,8 +772,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     toggleSearchMode(false);
                     selectedClientId = null;
                     selectedClientObject = null;
-                    btnCreate.disabled = true;
+                    selectedClientId = null;
+                    selectedClientObject = null;
+                    validateCreateButton();
                     clientList.innerHTML = '';
+
+                    if (closeAfterCreateCheckbox) {
+                        closeAfterCreateCheckbox.checked = false;
+                        closeOptionsDiv.classList.add('hidden');
+                    }
+
+                    selectedReasonIds.clear();
+                    if (closeReasonSelect) closeReasonSelect.value = '';
+                    if (typeof updateCustomSelectUI === 'function') updateCustomSelectUI();
+
+                    if (closeCommentInput) closeCommentInput.value = '';
+                    if (closeTimeInput) closeTimeInput.value = '5';
                 }
 
 
@@ -870,7 +982,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.querySelectorAll('.client-item').forEach(el => el.classList.remove('selected'));
         element.classList.add('selected');
-        btnCreate.disabled = false;
+        element.classList.add('selected');
+        validateCreateButton();
 
         saveDraft();
     }
@@ -892,7 +1005,9 @@ document.addEventListener('DOMContentLoaded', () => {
     btnCreate.addEventListener('click', async () => {
         if (!currentCallData || !selectedClientId) return;
         btnCreate.disabled = true;
-        btnCreate.textContent = 'Создание...';
+
+        const shouldClose = closeAfterCreateCheckbox && closeAfterCreateCheckbox.checked;
+        btnCreate.textContent = shouldClose ? 'Создание и закрытие...' : 'Создание...';
 
         try {
             const ticketData = {
@@ -905,13 +1020,39 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = await window.api.createTicket(ticketData);
 
             if (result.IsValid && result.Redirect) {
-                btnCreate.textContent = '✓ Создано!';
-                btnCreate.classList.add('btn-success');
-
                 const subjectValue = ticketSubject.value.trim();
                 if (subjectValue) {
                     window.api.saveTopic(subjectValue).then(() => loadTopics());
                 }
+
+                if (shouldClose && result.Address) {
+                    btnCreate.textContent = 'Закрытие заявки...';
+
+                    const ticketIdMatch = result.Address.match(/\/Tickets\/Details\/(\d+)/);
+                    if (ticketIdMatch) {
+                        const ticketId = ticketIdMatch[1];
+                        const closeResult = await window.api.closeTicket({
+                            ticketId: ticketId,
+                            reasonId: closeReasonSelect ? closeReasonSelect.value : '',
+                            reasonIds: Array.from(selectedReasonIds),
+                            comment: closeCommentInput ? closeCommentInput.value : 'Вопрос решён',
+                            timeSpent: closeTimeInput ? parseInt(closeTimeInput.value) || 5 : 5
+                        });
+
+                        if (closeResult.success) {
+                            btnCreate.textContent = '✓ Создано и закрыто!';
+                        } else {
+                            btnCreate.textContent = '✓ Создано (ошибка закрытия)';
+                            console.error('Ошибка закрытия:', closeResult.error);
+                        }
+                    } else {
+                        btnCreate.textContent = '✓ Создано!';
+                    }
+                } else {
+                    btnCreate.textContent = '✓ Создано!';
+                }
+
+                btnCreate.classList.add('btn-success');
 
                 const completedCallId = currentCallData?.id;
                 setTimeout(() => {
@@ -940,17 +1081,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btnCreate.disabled = false;
         }
     });
-    const btnClearHistory = document.getElementById('btn-clear-history');
-    if (btnClearHistory) {
-        btnClearHistory.addEventListener('click', async () => {
-            if (confirm('Вы уверены, что хотите очистить историю звонков?')) {
-                await window.api.clearHistory();
-                callHistory = [];
-                loadHistory();
-                showCallData(null);
-            }
-        });
-    }
+
 
     btnSkip.addEventListener('click', () => {
         if (currentCallData && (currentCallData.status === 'skipped' || currentCallData.status === 'created')) return;
@@ -1002,8 +1133,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 li.className = 'history-item';
                 li.dataset.id = call.id;
                 li.addEventListener('click', () => {
-                    showCallData(call);
-                    window.api.lockCall(call.id);
+                    const freshCall = callHistory.find(c => c.id === call.id);
+                    if (freshCall) {
+                        showCallData(freshCall);
+                        window.api.lockCall(freshCall.id);
+                    }
                 });
                 li.innerHTML = innerHTML;
             } else {
@@ -1024,8 +1158,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const existingItems = Array.from(historyList.querySelectorAll('.history-item'));
         const existingMap = new Map();
         existingItems.forEach(el => existingMap.set(el.dataset.id, el));
-
-        // 2. Iterate new calls
         calls.forEach((call, index) => {
             const existingEl = existingMap.get(call.id);
             const li = updateOrCreateItem(call, existingEl);
@@ -1059,7 +1191,12 @@ document.addEventListener('DOMContentLoaded', () => {
             description: ticketDesc.value,
             selectedClientId: selectedClientId,
             selectedClientObject: selectedClientObject,
-            searchQuery: clientSearch.value
+            searchQuery: clientSearch.value,
+            closeAfterCreate: closeAfterCreateCheckbox ? closeAfterCreateCheckbox.checked : false,
+            closeReason: closeReasonSelect ? closeReasonSelect.value : '',
+            multiCloseReasons: Array.from(selectedReasonIds),
+            closeComment: closeCommentInput ? closeCommentInput.value : '',
+            closeTime: closeTimeInput ? closeTimeInput.value : '5'
         };
 
         clearTimeout(draftTimeout);
@@ -1205,5 +1342,204 @@ document.addEventListener('DOMContentLoaded', () => {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    function updateCustomSelectUI() {
+        if (!closeReasonSelect || !customSelectText) return;
+
+        const count = selectedReasonIds.size;
+
+        if (count === 0) {
+            customSelectText.textContent = 'Выберите причину';
+            customSelectText.style.color = 'var(--text-secondary, #64748b)';
+            return;
+        }
+
+        const names = [];
+        selectedReasonIds.forEach(id => {
+            const found = allTicketReasons.find(r => r.value === id);
+            if (found) names.push(found.text);
+            else names.push(id);
+        });
+
+        if (count > 1) {
+            customSelectText.textContent = `Выбрано причин: ${count}`;
+            customSelectText.title = names.join(', ');
+        } else {
+            customSelectText.textContent = names.join(', ');
+            customSelectText.removeAttribute('title');
+        }
+        customSelectText.style.color = '';
+
+        validateCreateButton();
+    }
+
+    function toggleCustomDropdown(force) {
+        if (!customSelectDropdown) return;
+        const isHidden = customSelectDropdown.classList.contains('hidden');
+        const show = (force !== undefined) ? force : isHidden;
+
+        if (show) {
+            const rect = customSelectContainer.getBoundingClientRect();
+            const spaceBelow = window.innerHeight - rect.bottom - 15;
+            const searchHeight = 50;
+            const maxListHeightCSS = 250;
+            let calculatedMaxHeight = maxListHeightCSS;
+
+            if (spaceBelow < (maxListHeightCSS + searchHeight)) {
+                calculatedMaxHeight = Math.max(100, spaceBelow - searchHeight);
+            }
+            if (customSelectList) customSelectList.style.maxHeight = calculatedMaxHeight + 'px';
+
+            customSelectContainer.classList.remove('opens-up');
+            customSelectDropdown.classList.remove('hidden');
+            customSelectContainer.classList.add('open');
+
+            if (customSelectSearch) {
+                customSelectSearch.value = '';
+                customSelectSearch.focus();
+            }
+            renderCustomOptions(allTicketReasons);
+        } else {
+            customSelectDropdown.classList.add('hidden');
+            customSelectContainer.classList.remove('open');
+            if (customSelectList) customSelectList.style.maxHeight = '';
+        }
+    }
+
+    function renderCustomOptions(list) {
+        if (!customSelectList) return;
+        customSelectList.innerHTML = '';
+
+        list.forEach(r => {
+            const div = document.createElement('div');
+            div.className = 'option-item';
+            const isSelected = selectedReasonIds.has(r.value);
+            if (isSelected) div.classList.add('selected');
+            const check = document.createElement('div');
+            check.className = 'option-check';
+            check.textContent = isSelected ? '✓' : '';
+
+            const textSpan = document.createElement('span');
+            textSpan.textContent = r.text;
+
+            div.appendChild(check);
+            div.appendChild(textSpan);
+
+            div.addEventListener('click', (e) => {
+                e.stopPropagation();
+
+                if (selectedReasonIds.has(r.value)) {
+                    selectedReasonIds.delete(r.value);
+                    div.classList.remove('selected');
+                    check.textContent = '';
+                } else {
+                    selectedReasonIds.add(r.value);
+                    div.classList.add('selected');
+                    check.textContent = '✓';
+                }
+
+                updateCustomSelectUI();
+                if (selectedReasonIds.size > 0) {
+                    closeReasonSelect.value = Array.from(selectedReasonIds)[0];
+                } else {
+                    closeReasonSelect.value = '';
+                }
+
+                saveDraft();
+            });
+            customSelectList.appendChild(div);
+        });
+
+        if (list.length === 0) {
+            const div = document.createElement('div');
+            div.className = 'option-item';
+            div.style.cursor = 'default';
+            div.style.justifyContent = 'center';
+            div.textContent = 'Ничего не найдено';
+            customSelectList.appendChild(div);
+        }
+    }
+
+    async function ensureReasonsLoaded() {
+        if (reasonsLoaded) {
+            updateCustomSelectUI();
+            return;
+        }
+        if (isLoadingReasons) return;
+
+        if (customSelectText) customSelectText.textContent = 'Загрузка...';
+        isLoadingReasons = true;
+
+        try {
+            const reasons = await window.api.getTicketReasons();
+            allTicketReasons = reasons;
+
+            if (closeReasonSelect) {
+                closeReasonSelect.innerHTML = '<option value="">Выберите причину</option>';
+                reasons.forEach(r => {
+                    const opt = document.createElement('option');
+                    opt.value = r.value;
+                    opt.textContent = r.text;
+                    closeReasonSelect.appendChild(opt);
+                });
+            }
+
+            reasonsLoaded = true;
+            updateCustomSelectUI();
+        } catch (e) {
+            console.error('Ошибка загрузки причин:', e);
+            if (customSelectText) customSelectText.textContent = 'Ошибка загрузки';
+        } finally {
+            isLoadingReasons = false;
+        }
+    }
+    if (closeAfterCreateCheckbox) {
+        closeAfterCreateCheckbox.addEventListener('change', async () => {
+            const isChecked = closeAfterCreateCheckbox.checked;
+            if (isChecked) {
+                closeOptionsDiv.classList.remove('hidden');
+                await ensureReasonsLoaded();
+            } else {
+                closeOptionsDiv.classList.add('hidden');
+            }
+            saveDraft();
+        });
+    }
+
+    if (customSelectTrigger) {
+        customSelectTrigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!reasonsLoaded) {
+                ensureReasonsLoaded().then(() => toggleCustomDropdown(true));
+            } else {
+                toggleCustomDropdown();
+            }
+        });
+    }
+
+    if (customSelectSearch) {
+        customSelectSearch.addEventListener('input', (e) => {
+            const term = e.target.value.toLowerCase();
+            const filtered = allTicketReasons.filter(r => r.text.toLowerCase().includes(term));
+            renderCustomOptions(filtered);
+        });
+        customSelectSearch.addEventListener('click', e => e.stopPropagation());
+    }
+
+    document.addEventListener('click', (e) => {
+        if (customSelectContainer && !customSelectContainer.contains(e.target)) {
+            toggleCustomDropdown(false);
+        }
+    });
+
+    if (closeReasonSelect) {
+        closeReasonSelect.addEventListener('change', saveDraft);
+    }
+    if (closeCommentInput) {
+        closeCommentInput.addEventListener('input', saveDraft);
+    }
+    if (closeTimeInput) {
+        closeTimeInput.addEventListener('input', saveDraft);
     }
 });

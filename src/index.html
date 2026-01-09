@@ -78,10 +78,6 @@
                 </ul>
                 <div id="history-empty" class="history-empty">Нет звонков</div>
             </div>
-
-            <button id="btn-clear-history" class="btn-text-danger" title="Очистить историю">
-                🗑 Очистить историю
-            </button>
         </aside>
 
 
@@ -262,6 +258,49 @@
                                     <textarea id="ticket-desc" class="modern-textarea full-height-input"
                                         placeholder="Подробности звонка..."></textarea>
                                 </div>
+
+                                <div class="close-after-create-section">
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="close-after-create">
+                                        <span class="toggle-slider"></span>
+                                        <span class="toggle-label">Создать и сразу закрыть</span>
+                                    </label>
+
+                                    <div id="close-options" class="close-options hidden">
+                                        <div class="form-group">
+                                            <label>Причина обращения</label>
+                                            <select id="close-reason" class="modern-select" style="display: none;">
+                                                <option value="">Загрузка...</option>
+                                            </select>
+
+                                            <div id="close-reason-custom-container" class="custom-select-container">
+                                                <div id="close-reason-display"
+                                                    class="custom-select-trigger modern-input">
+                                                    <span id="close-reason-text">Выберите причину</span>
+                                                    <span class="arrow">▼</span>
+                                                </div>
+                                                <div id="close-reason-dropdown" class="custom-options-dropdown hidden">
+                                                    <div class="search-wrapper">
+                                                        <input type="text" id="close-reason-search"
+                                                            placeholder="Поиск..." autocomplete="off">
+                                                    </div>
+                                                    <div id="close-reason-list" class="options-list"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Комментарий закрытия</label>
+                                            <input type="text" id="close-comment" class="modern-input"
+                                                placeholder="Вопрос решён">
+                                        </div>
+                                        <div class="form-group form-group-inline">
+                                            <label>Время (мин)</label>
+                                            <input type="number" id="close-time" class="modern-input time-input"
+                                                value="5" min="1" max="480">
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div class="form-footer">
                                     <button id="btn-create" class="btn btn-primary btn-block btn-lg" disabled>Создать
                                         заявку</button>

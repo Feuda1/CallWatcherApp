@@ -133,8 +133,8 @@ function saveAuthState(status) {
 
 function createMainWindow() {
     mainWindow = new BrowserWindow({
-        width: 960,
-        height: 700,
+        width: 1400,
+        height: 920,
         minWidth: 600,
         minHeight: 500,
         frame: false,
@@ -366,6 +366,11 @@ async function checkCalls() {
 
             if (!isSkipped) {
                 if (!isCallLocked || lockedCallId === callData.id) {
+                    const historyItem = callHistory.find(c => c.id === callData.id);
+                    if (historyItem && historyItem.draft) {
+                        callData.draft = historyItem.draft;
+                    }
+
                     latestCallData = callData;
 
                     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1214,7 +1219,7 @@ ipcMain.handle('create-ticket', async (event, { callData, clientId, clientName, 
         while ((inputMatch = inputRegex.exec(pageHtml)) !== null) {
             const [, name, value] = inputMatch;
             if (name && !formParams.has(name)) {
-                formParams.append(name, value);
+                formParams.append(name, decodeHtmlEntities(value));
             }
 
         }
@@ -1239,13 +1244,16 @@ ipcMain.handle('create-ticket', async (event, { callData, clientId, clientName, 
                     }
                 }
                 if (selectedValue) {
-                    formParams.append(name, selectedValue);
+                    formParams.append(name, decodeHtmlEntities(selectedValue));
                 }
             }
         }
 
         formParams.set('selectedClientId', clientId);
-        formParams.set('newCaption', subject || 'Входящий звонок');
+        const rawSubject = subject || 'Входящий звонок';
+        const decodedSubject = decodeHtmlEntities(rawSubject);
+        console.log('[CallWatcher] Subject raw:', rawSubject, 'Decoded:', decodedSubject);
+        formParams.set('newCaption', decodedSubject);
 
         console.log('[CallWatcher] Получено описание:', description);
 
@@ -1313,6 +1321,9 @@ ipcMain.on('update-call-draft', (event, callId, draft) => {
     if (item) {
         item.draft = draft;
         saveHistory();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('call-history', callHistory);
+        }
     }
 });
 
@@ -1348,6 +1359,275 @@ ipcMain.on('open-ticket-browser', (event, callData, clientId) => {
     console.log('[CallWatcher] Открытие в браузере:', url);
 
     shell.openExternal(url);
+});
+
+const FALLBACK_REASONS = [
+    { value: 'iikoFront (консультации, настройка)', text: 'iikoFront (консультации, настройка)' },
+    { value: 'iikoOffice (консультации, настройка)', text: 'iikoOffice (консультации, настройка)' },
+    { value: 'Сервер iiko', text: 'Сервер iiko' },
+    { value: 'ЕГАИС (консультация)', text: 'ЕГАИС (консультация)' },
+    { value: 'ЕГАИС (что-то не работает)', text: 'ЕГАИС (что-то не работает)' },
+    { value: 'Честный знак, ОФД, Меркурий', text: 'Честный знак, ОФД, Меркурий' },
+    { value: 'Обучение', text: 'Обучение' },
+    { value: 'Лицензии', text: 'Лицензии' },
+    { value: 'iikoWeb', text: 'iikoWeb' },
+    { value: 'Лояльность (работа, отчёты, настройки)', text: 'Лояльность (работа, отчёты, настройки)' },
+    { value: 'Банк(ошибки, подключение)', text: 'Банк(ошибки, подключение)' },
+    { value: '1С', text: '1С' },
+    { value: 'Прочее', text: 'Прочее' }
+];
+
+function decodeHtmlEntities(text) {
+    if (!text) return text;
+    return text.replace(/&#x([0-9A-F]+);/gi, (match, hex) => String.fromCharCode(parseInt(hex, 16)))
+        .replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(parseInt(dec, 10)))
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'");
+}
+
+let cachedReasons = null;
+
+ipcMain.handle('get-ticket-reasons', async () => {
+    if (cachedReasons && cachedReasons.length > 0) {
+        return cachedReasons;
+    }
+
+    try {
+        console.log('[CallWatcher] Попытка загрузки причин с сервера...');
+        const ses = session.defaultSession;
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+
+        const response = await ses.fetch('https://clients.denvic.ru/Tickets/Details/583867', {
+            signal: controller.signal
+        });
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+            throw new Error(`HTTP ошибка: ${response.status}`);
+        }
+
+        const html = await response.text();
+        const reasons = [];
+
+        const selectMatch = html.match(/<select[^>]*id="ticket_reason_select"[^>]*>([\s\S]*?)<\/select>/i) ||
+            html.match(/<select[^>]*name="ticket\.TicketReason"[^>]*>([\s\S]*?)<\/select>/i) ||
+            html.match(/<select[^>]*name="ticket\.ReasonId"[^>]*>([\s\S]*?)<\/select>/i);
+
+        if (selectMatch) {
+            const optionRegex = /<option[^>]*value="([^"]*)"[^>]*>([^<]*)<\/option>/g;
+            let match;
+            while ((match = optionRegex.exec(selectMatch[1])) !== null) {
+                const [, value, text] = match;
+                if (value && value.trim()) {
+                    const cleanValue = value.trim();
+                    const rawText = text ? text.trim() : cleanValue;
+                    reasons.push({ value: decodeHtmlEntities(cleanValue), text: decodeHtmlEntities(rawText) });
+                }
+            }
+        } else {
+        }
+
+        if (reasons.length > 0) {
+            console.log(`[CallWatcher] Успешно загружено ${reasons.length} причин`);
+            cachedReasons = reasons;
+            return reasons;
+        } else {
+            throw new Error('Не удалось спарсить причины из HTML');
+        }
+
+    } catch (error) {
+        console.warn(`[CallWatcher] Ошибка загрузки причин (${error.message}). Используем резервный список.`);
+        cachedReasons = FALLBACK_REASONS;
+        return FALLBACK_REASONS;
+    }
+});
+
+ipcMain.handle('close-ticket', async (event, params) => {
+    try {
+        let { ticketId, reasonId, reasonIds, comment, timeSpent } = params;
+        console.log('[CallWatcher] Закрытие заявки:', ticketId);
+
+        if (reasonIds && Array.isArray(reasonIds) && reasonIds.length > 0) {
+            if (reasonIds.length === 1) {
+                reasonId = reasonIds[0];
+            } else {
+                const reasonsList = cachedReasons || FALLBACK_REASONS;
+                const selectedTexts = [];
+
+                reasonIds.forEach(id => {
+                    const r = reasonsList.find(x => x.value == id);
+                    if (r) selectedTexts.push(typeof r.text === 'string' ? r.text : id);
+                    else selectedTexts.push(id);
+                });
+
+                const namesStr = selectedTexts.join(', ');
+                if (namesStr) {
+                    const prefix = `[Причины: ${namesStr}]`;
+                    comment = comment ? `${prefix}\n${comment}` : prefix;
+                }
+                reasonId = reasonIds[0];
+            }
+        }
+
+        console.log('[CallWatcher] Параметры закрытия (processed):', { reasonId, comment, timeSpent });
+        const ses = session.defaultSession;
+
+        const pageUrl = `https://clients.denvic.ru/Tickets/Details/${ticketId}`;
+        console.log('[CallWatcher] Загрузка страницы заявки:', pageUrl);
+        const pageResponse = await ses.fetch(pageUrl);
+
+        if (!pageResponse.ok) {
+            throw new Error(`Ошибка загрузки страницы заявки: ${pageResponse.status}`);
+        }
+
+        const pageHtml = await pageResponse.text();
+        console.log('[CallWatcher] Страница заявки загружена, размер:', pageHtml.length);
+
+        try {
+            const debugPath = path.join(app.getAppPath(), 'last_ticket_page.html');
+            fs.writeFileSync(debugPath, pageHtml);
+            console.log('[CallWatcher] DEBUG: Saved page HTML to', debugPath);
+        } catch (e) {
+            console.error('[CallWatcher] DEBUG: Failed to save HTML:', e);
+        }
+
+        let token = null;
+        const tokenTagMatch = pageHtml.match(/<input[^>]*__RequestVerificationToken[^>]*>/i);
+        if (tokenTagMatch) {
+            const valMatch = tokenTagMatch[0].match(/value="([^"]*)"/i);
+            if (valMatch) token = valMatch[1];
+        }
+
+        if (!token) {
+            throw new Error('Не найден токен верификации (__RequestVerificationToken)');
+        }
+        console.log('[CallWatcher] Токен верификации найден');
+
+        const formParams = new URLSearchParams();
+        formParams.append('__RequestVerificationToken', token);
+        formParams.append('ticket.StateId', '4');
+
+        let reasonParamName = 'ticket.TicketReason';
+        if (pageHtml.match(/name="ticket\.ReasonId"/)) {
+            reasonParamName = 'ticket.ReasonId';
+        }
+
+        if (reasonIds && Array.isArray(reasonIds) && reasonIds.length > 0) {
+            reasonIds.forEach(id => {
+                formParams.append(reasonParamName, decodeHtmlEntities(id || ''));
+            });
+        } else {
+            formParams.append(reasonParamName, decodeHtmlEntities(reasonId || ''));
+        }
+
+        formParams.append('newArticle.Body', `<p>${comment || 'Вопрос решён'}</p>`);
+        formParams.append('newArticleTimeUnit', (timeSpent || 5).toString());
+        formParams.append('newArticle.Internal', 'false');
+
+        const inputGlobalRegex = /<input([^>]*)>/gi;
+        let inputTagMatch;
+        while ((inputTagMatch = inputGlobalRegex.exec(pageHtml)) !== null) {
+            const tagContent = inputTagMatch[1];
+            const nameMatch = tagContent.match(/name="([^"]*)"/i);
+            const valMatch = tagContent.match(/value="([^"]*)"/i);
+
+            if (nameMatch) {
+                const name = nameMatch[1];
+                const value = valMatch ? valMatch[1] : '';
+
+                if (name && !formParams.has(name) && !name.includes('__RequestVerification')) {
+                    formParams.append(name, decodeHtmlEntities(value));
+                }
+            }
+        }
+
+        const selectRegex = /<select[^>]*name="([^"]*)"[^>]*>([\s\S]*?)<\/select>/g;
+        let selectMatch;
+        while ((selectMatch = selectRegex.exec(pageHtml)) !== null) {
+            const [, name, content] = selectMatch;
+
+            if (name === 'ticket.TicketReason' || name === 'ticket.ReasonId') {
+                console.log(`[CallWatcher] На странице найден селект ${name}. Содержимое (первые 100 символов):`, content.substring(0, 100));
+            }
+
+            if (name && !formParams.has(name) && name !== 'ticket.TicketReason') {
+                const optionRegex = /<option([^>]*)value="([^"]*)"([^>]*)>/g;
+                let optMatch;
+                let selectedValue = null;
+                while ((optMatch = optionRegex.exec(content)) !== null) {
+                    const [, beforeValue, value, afterValue] = optMatch;
+                    const fullAttrs = beforeValue + afterValue;
+
+                    const isSelected = fullAttrs.includes('selected');
+                    const isDisabled = fullAttrs.includes('disabled');
+                    if (isSelected && !isDisabled && value) {
+                        selectedValue = value;
+                        break;
+                    }
+                }
+                if (selectedValue) {
+                    formParams.append(name, decodeHtmlEntities(selectedValue));
+                }
+            }
+        }
+
+        console.log('[CallWatcher] Отправка формы закрытия...');
+        const saveResponse = await ses.fetch(`https://clients.denvic.ru/Tickets/Details/${ticketId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: formParams.toString()
+        });
+
+        const saveHtml = await saveResponse.text();
+        console.log('[CallWatcher] Ответ сервера:', saveHtml);
+
+        try {
+            if (saveHtml.startsWith('{') && saveHtml.endsWith('}')) {
+                const json = JSON.parse(saveHtml);
+                if (typeof json.IsValid !== 'undefined' && !json.IsValid) {
+                    console.error('[CallWatcher] Сервер вернул ошибку валидации:', json);
+                    throw new Error(json.Error || 'Ошибка валидации (сервер не принял данные)');
+                }
+            }
+        } catch (e) {
+            if (e.message.includes('Ошибка валидации')) throw e;
+        }
+
+        if (saveHtml.includes('newArticleTimeUnit') || saveHtml.includes('Учет времени')) {
+            console.log('[CallWatcher] Появилось окно ввода времени');
+
+            const timeTokenMatch = saveHtml.match(/name="__RequestVerificationToken"[^>]*value="([^"]*)"/);
+            const timeToken = timeTokenMatch ? timeTokenMatch[1] : token;
+
+            const timeParams = new URLSearchParams();
+            timeParams.append('__RequestVerificationToken', timeToken);
+            timeParams.append('newArticleTimeUnit', String(timeSpent || 5));
+            timeParams.append('ticketId', String(ticketId));
+
+            const timeResponse = await ses.fetch(`https://clients.denvic.ru/Tickets/SaveTime/${ticketId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: timeParams.toString()
+            });
+
+            console.log('[CallWatcher] Ответ сохранения времени:', timeResponse.status);
+        }
+
+        console.log('[CallWatcher] Заявка закрыта успешно');
+        return { success: true };
+    } catch (error) {
+        console.error('[CallWatcher] Ошибка закрытия заявки:', error);
+        return { success: false, error: error.message };
+    }
 });
 
 
