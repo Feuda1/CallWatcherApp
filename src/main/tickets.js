@@ -21,7 +21,7 @@ function decodeHtmlEntities(text) {
 // Поиск клиентов
 async function searchClients(query) {
     try {
-        console.log('[CallWatcher] Поиск:', query);
+
         const ses = session.defaultSession;
         const url = `https://clients.denvic.ru/Tickets/GetClientByQuery?query=${encodeURIComponent(query)}`;
         const response = await ses.fetch(url);
@@ -38,7 +38,7 @@ async function searchClients(query) {
         }
 
         const clients = await response.json();
-        console.log('[CallWatcher] Поиск нашел:', clients.length, 'клиентов');
+
         return clients;
     } catch (error) {
         console.error('[CallWatcher] Ошибка поиска:', error);
@@ -49,7 +49,7 @@ async function searchClients(query) {
 // Создание заявки
 async function createTicket({ callData, clientId, clientName, subject, description }) {
     try {
-        console.log('[CallWatcher] Создание заявки для:', clientId);
+
         const ses = session.defaultSession;
 
         let urlParams = callData.rawParams;
@@ -60,11 +60,11 @@ async function createTicket({ callData, clientId, clientName, subject, descripti
             if (callData.date) params.append('selectedPhoneDate', callData.date);
             if (callData.duration) params.append('selectedPhoneDuration', callData.duration);
             urlParams = params.toString();
-            console.log('[CallWatcher] Сгенерированы параметры URL:', urlParams);
+
         }
 
         const pageUrl = `https://clients.denvic.ru/Tickets/Create?${urlParams}`;
-        console.log('[CallWatcher] Загрузка страницы:', pageUrl);
+
         const pageResponse = await ses.fetch(pageUrl);
 
         if (!pageResponse.ok) {
@@ -81,7 +81,7 @@ async function createTicket({ callData, clientId, clientName, subject, descripti
             pageHtml.includes('недоступн') || pageHtml.includes('error')) {
             const errorMatch = pageHtml.match(/<div[^>]*class="[^"]*alert[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
             const errorText = errorMatch ? errorMatch[1].replace(/<[^>]+>/g, '').trim() : '';
-            console.log('[CallWatcher] Возможная ошибка на странице:', errorText);
+
         }
 
         if (!pageHtml.includes('__RequestVerificationToken')) {
@@ -126,10 +126,10 @@ async function createTicket({ callData, clientId, clientName, subject, descripti
         formParams.set('selectedClientId', clientId);
         const rawSubject = subject || 'Входящий звонок';
         const decodedSubject = decodeHtmlEntities(rawSubject);
-        console.log('[CallWatcher] Subject raw:', rawSubject, 'Decoded:', decodedSubject);
+
         formParams.set('newCaption', decodedSubject);
 
-        console.log('[CallWatcher] Получено описание:', description);
+
 
         const formattedDesc = (description || '').replace(/\n/g, '<br>');
         const htmlDesc = `<p>Входящий звонок: ${callData.phone || '?'}<br>Дата: ${callData.date}<br>Длительность: ${callData.duration} с.${formattedDesc ? `<br><br>${formattedDesc}` : ''}</p>`;
@@ -150,7 +150,7 @@ async function createTicket({ callData, clientId, clientName, subject, descripti
             result = await createResponse.json();
         } else {
             const responseText = await createResponse.text();
-            console.log('[CallWatcher] Сервер вернул HTML вместо JSON');
+
 
             if (responseText.includes('/Tickets/Details/')) {
                 const detailsMatch = responseText.match(/\/Tickets\/Details\/(\d+)/);
@@ -166,11 +166,8 @@ async function createTicket({ callData, clientId, clientName, subject, descripti
             }
         }
 
-        console.log('[CallWatcher] Результат создания заявки:', result);
-
         if (result.IsValid && callData.phone) {
             associations.setAssociation(callData.phone, clientId, clientName);
-            console.log('[CallWatcher] Сохранена ассоциация для', callData.phone);
         }
 
         return result;
@@ -188,7 +185,7 @@ async function getTicketReasons() {
     }
 
     try {
-        console.log('[CallWatcher] Попытка загрузки причин с сервера...');
+
         const ses = session.defaultSession;
 
         const controller = new AbortController();
@@ -224,7 +221,7 @@ async function getTicketReasons() {
         }
 
         if (reasons.length > 0) {
-            console.log(`[CallWatcher] Успешно загружено ${reasons.length} причин`);
+
             state.setCachedReasons(reasons);
             return reasons;
         } else {
@@ -266,11 +263,11 @@ async function closeTicket(params) {
             }
         }
 
-        console.log('[CallWatcher] Параметры закрытия (processed):', { reasonId, comment, timeSpent });
+
         const ses = session.defaultSession;
 
         const pageUrl = `https://clients.denvic.ru/Tickets/Details/${ticketId}`;
-        console.log('[CallWatcher] Загрузка страницы заявки:', pageUrl);
+
         const pageResponse = await ses.fetch(pageUrl);
 
         if (!pageResponse.ok) {
@@ -278,16 +275,7 @@ async function closeTicket(params) {
         }
 
         const pageHtml = await pageResponse.text();
-        console.log('[CallWatcher] Страница заявки загружена, размер:', pageHtml.length);
 
-        // Debug save
-        try {
-            const debugPath = path.join(app.getAppPath(), 'last_ticket_page.html');
-            fs.writeFileSync(debugPath, pageHtml);
-            console.log('[CallWatcher] DEBUG: Saved page HTML to', debugPath);
-        } catch (e) {
-            console.error('[CallWatcher] DEBUG: Failed to save HTML:', e);
-        }
 
         let token = null;
         const tokenTagMatch = pageHtml.match(/<input[^>]*__RequestVerificationToken[^>]*>/i);
@@ -299,7 +287,7 @@ async function closeTicket(params) {
         if (!token) {
             throw new Error('Не найден токен верификации (__RequestVerificationToken)');
         }
-        console.log('[CallWatcher] Токен верификации найден');
+
 
         const formParams = new URLSearchParams();
         formParams.append('__RequestVerificationToken', token);
@@ -344,9 +332,7 @@ async function closeTicket(params) {
         while ((selectMatch = selectRegex.exec(pageHtml)) !== null) {
             const [, name, content] = selectMatch;
 
-            if (name === 'ticket.TicketReason' || name === 'ticket.ReasonId') {
-                console.log(`[CallWatcher] На странице найден селект ${name}. Содержимое (первые 100 символов):`, content.substring(0, 100));
-            }
+
 
             if (name && !formParams.has(name) && name !== 'ticket.TicketReason') {
                 const optionRegex = /<option([^>]*)value="([^"]*)"([^>]*)>/g;
@@ -369,7 +355,7 @@ async function closeTicket(params) {
             }
         }
 
-        console.log('[CallWatcher] Отправка формы закрытия...');
+
         const saveResponse = await ses.fetch(`https://clients.denvic.ru/Tickets/Details/${ticketId}`, {
             method: 'POST',
             headers: {
@@ -379,7 +365,7 @@ async function closeTicket(params) {
         });
 
         const saveHtml = await saveResponse.text();
-        console.log('[CallWatcher] Ответ сервера:', saveHtml);
+
 
         try {
             if (saveHtml.startsWith('{') && saveHtml.endsWith('}')) {
@@ -394,7 +380,7 @@ async function closeTicket(params) {
         }
 
         if (saveHtml.includes('newArticleTimeUnit') || saveHtml.includes('Учет времени')) {
-            console.log('[CallWatcher] Появилось окно ввода времени');
+
 
             const timeTokenMatch = saveHtml.match(/name="__RequestVerificationToken"[^>]*value="([^"]*)"/);
             const timeToken = timeTokenMatch ? timeTokenMatch[1] : token;
@@ -412,10 +398,10 @@ async function closeTicket(params) {
                 body: timeParams.toString()
             });
 
-            console.log('[CallWatcher] Ответ сохранения времени:', timeResponse.status);
+
         }
 
-        console.log('[CallWatcher] Заявка закрыта успешно');
+
         return { success: true };
     } catch (error) {
         console.error('[CallWatcher] Ошибка закрытия заявки:', error);
@@ -453,7 +439,7 @@ function openTicketInBrowser(callData, clientId) {
     }
 
     const url = `https://clients.denvic.ru/Tickets/Create?${params.toString()}`;
-    console.log('[CallWatcher] Открытие в браузере:', url);
+
 
     shell.openExternal(url);
 }

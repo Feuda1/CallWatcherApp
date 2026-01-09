@@ -19,7 +19,6 @@ function parseCallData(html) {
     });
 
     if (callBoundaries.length === 0) {
-        console.log('[CallWatcher] No active call rows found.');
         return null;
     }
 
@@ -245,7 +244,6 @@ async function fetchAllCalls(forceRefresh = false, emitProgress = true) {
 
     const currentPromise = state.getCurrentFetchPromise();
     if (currentPromise) {
-        console.log('[CallWatcher] Bulk: Joining existing fetch operation...');
         return currentPromise;
     }
 
@@ -259,12 +257,10 @@ async function fetchAllCalls(forceRefresh = false, emitProgress = true) {
         try {
             while (hasMore && page <= MAX_PAGES) {
                 const url = `https://clients.denvic.ru/PhoneCalls?onlyMy=true&page=${page}`;
-                console.log(`[CallWatcher] Bulk: Fetching page ${page}...`);
 
                 const response = await ses.fetch(url, { credentials: 'include' });
 
                 if (!response.ok || response.url.includes('Login')) {
-                    console.log('[CallWatcher] Bulk: Not logged in or error');
                     if (page === 1) return [];
                     break;
                 }
@@ -273,12 +269,10 @@ async function fetchAllCalls(forceRefresh = false, emitProgress = true) {
                 const pageCalls = parseAllCallsFromPage(html);
 
                 if (pageCalls.length === 0) {
-                    console.log(`[CallWatcher] Bulk: Page ${page} is empty, stopping.`);
                     hasMore = false;
                 } else {
                     const newCalls = pageCalls.filter(nc => !allCalls.find(ac => ac.id === nc.id));
                     allCalls.push(...newCalls);
-                    console.log(`[CallWatcher] Bulk: Added ${newCalls.length} calls from page ${page}`);
 
                     const mainWindow = state.getMainWindow();
                     if (mainWindow && !mainWindow.isDestroyed() && emitProgress) {
@@ -289,14 +283,14 @@ async function fetchAllCalls(forceRefresh = false, emitProgress = true) {
                 }
             }
 
-            console.log(`[CallWatcher] Bulk: Loaded ${allCalls.length} total calls`);
+
 
             state.setBulkCallsCache(allCalls);
             state.setBulkLastFetched(Date.now());
             return allCalls;
 
         } catch (error) {
-            console.error('[CallWatcher] Bulk fetch error:', error);
+            console.error('[CallWatcher] Ошибка загрузки звонков:', error);
             return [];
         } finally {
             state.setCurrentFetchPromise(null);
@@ -309,7 +303,6 @@ async function fetchAllCalls(forceRefresh = false, emitProgress = true) {
 
 // Восстановление истории с сервера
 async function restoreHistoryFromServer() {
-    console.log('[CallWatcher] Начало восстановления истории с сервера...');
     try {
         const serverCalls = await fetchAllCalls(true, false);
         const callHistory = state.getCallHistory();
@@ -357,14 +350,11 @@ async function restoreHistoryFromServer() {
                 mainWindow.webContents.send('call-history', state.getCallHistory());
             }
         } else {
-            console.log('[CallWatcher] Новых звонков для восстановления не найдено.');
         }
 
-        const shownCallIds = state.getShownCallIds();
         state.getCallHistory().forEach(c => {
             if (c.id) shownCallIds.add(c.id);
         });
-        console.log('[CallWatcher] Обновлен список показанных звонков:', shownCallIds.size);
 
     } catch (e) {
         console.error('[CallWatcher] Ошибка восстановления истории:', e);
@@ -382,9 +372,7 @@ async function checkCalls() {
         const authResponse = await ses.fetch(authCheckUrl, { credentials: 'include' });
         const authHtml = await authResponse.text();
 
-        const hasPasswordField = authHtml.includes('Password');
-        const hasLoginKeyword = authHtml.includes('Войти') || authHtml.includes('login');
-        console.log('[CallWatcher] Проверка: Password:', hasPasswordField, ', Login:', hasLoginKeyword);
+
 
         const isLoginPage = authHtml.includes('Password') ||
             authHtml.includes('Войти') ||
@@ -395,7 +383,7 @@ async function checkCalls() {
         const isFirstPoll = state.getIsFirstPoll();
 
         if (isLoginPage) {
-            console.log('[CallWatcher] Проверка авторизации: обнаружена страница входа -> Не авторизован');
+
             if (state.getIsLoggedIn()) {
                 auth.saveAuthState(false);
                 if (mainWindow && !mainWindow.isDestroyed()) {
@@ -419,7 +407,7 @@ async function checkCalls() {
         });
 
         if (!response.ok || response.url.includes('Login')) {
-            console.log('[CallWatcher] Не авторизован');
+
             if (state.getIsLoggedIn()) {
                 state.setIsLoggedIn(false);
                 if (mainWindow && !mainWindow.isDestroyed()) {
@@ -436,7 +424,7 @@ async function checkCalls() {
         const html = await response.text();
 
         if (html.includes('id="Input_Password"') || html.includes('name="Input.Password"') || html.includes('Вход в систему')) {
-            console.log('[CallWatcher] Обнаружена форма входа, считаем что не авторизован');
+
             if (state.getIsLoggedIn()) {
                 auth.saveAuthState(false);
                 if (mainWindow && !mainWindow.isDestroyed()) {
@@ -452,7 +440,7 @@ async function checkCalls() {
 
         if (!state.getIsLoggedIn()) {
             auth.saveAuthState(true);
-            console.log('[CallWatcher] Успешная авторизация');
+
             if (mainWindow && !mainWindow.isDestroyed()) {
                 mainWindow.webContents.send('login-status', true);
             }
@@ -472,7 +460,7 @@ async function checkCalls() {
                 }
             }
 
-            console.log('[CallWatcher] Найден звонок:', callData.phone);
+
 
             if (!callHistory.find(c => c.id === callData.id)) {
                 history.addToHistory(callData, 'unprocessed');
@@ -499,19 +487,15 @@ async function checkCalls() {
                 }
 
                 if (isFirstPoll) {
-                    console.log('[CallWatcher] Запуск: игнорируем существующий звонок:', callData.id);
                     shownCallIds.add(callData.id);
                 }
 
                 if (!shownCallIds.has(callData.id) && !isSkipped && !isFirstPoll) {
                     state.setLatestCallData(callData);
-
-                    console.log('[CallWatcher] Новый звонок, показываем уведомление. Всего показано:', shownCallIds.size + 1);
                     windows.showNotification(callData);
                     shownCallIds.add(callData.id);
                 }
             } else {
-                console.log('[CallWatcher] Звонок пропущен, игнорируем:', callData.id);
             }
         } else {
             if (!isCallLocked) {
@@ -524,7 +508,6 @@ async function checkCalls() {
 
         if (isFirstPoll) {
             state.setIsFirstPoll(false);
-            console.log('[CallWatcher] Проверки запуска завершены. Будущие звонки вызовут уведомления.');
         }
 
         history.saveHistory();
