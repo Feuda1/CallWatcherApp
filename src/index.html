@@ -68,6 +68,10 @@
                             <span class="stat-value" id="stat-unfilled">0</span>
                             <span class="stat-label">Осталось</span>
                         </div>
+                        <div class="stat-item stat-skipped">
+                            <span class="stat-value" id="stat-skipped">0</span>
+                            <span class="stat-label">Пропущено</span>
+                        </div>
                     </div>
                 </div>
 
@@ -246,6 +250,11 @@
                                 </div>
 
                                 <div class="list-scroll-area">
+
+                                    <div id="remembered-section" class="hidden">
+                                        <div class="list-label-small remembered-label">Выбирали ранее</div>
+                                        <ul id="remembered-list" class="unified-list remembered-list"></ul>
+                                    </div>
 
                                     <div id="suggestions-section">
                                         <div class="list-label-small">Предложения</div>

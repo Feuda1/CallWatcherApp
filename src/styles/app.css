@@ -22,7 +22,7 @@
     --accent-danger: #ef4444;
     --accent-warning: #f59e0b;
 
-    --sidebar-width: 300px;
+    --sidebar-width: 360px;
     --header-height: 60px;
 
 
@@ -36,6 +36,19 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+}
+
+*:focus {
+    outline: none;
+}
+
+button,
+[type="button"],
+.mode-tab,
+.filter-tab,
+.btn {
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 body {
@@ -212,36 +225,30 @@ textarea {
 .stat-item {
     flex: 1;
     text-align: center;
-    padding: 0.75rem 0.25rem;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 8px;
+    padding: 0.4rem 0.25rem;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 6px;
     min-width: 0;
     display: flex;
     flex-direction: column;
     justify-content: center;
-    height: 70px;
+    gap: 1px;
 }
 
 .stat-value {
     display: block;
-    font-size: 1.5rem;
-    font-weight: 800;
-    line-height: 1.2;
+    font-size: 1.2rem;
+    font-weight: 700;
+    line-height: 1;
     color: #fff;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 .stat-label {
     font-size: 0.55rem;
     text-transform: uppercase;
-    color: #94a3b8;
+    color: #64748b;
     letter-spacing: 0;
-    margin-top: 2px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    line-height: 1.1;
 }
 
 .stat-success .stat-value {
@@ -250,6 +257,10 @@ textarea {
 
 .stat-pending .stat-value {
     color: #f472b6;
+}
+
+.stat-skipped .stat-value {
+    color: #94a3b8;
 }
 
 .duration-filter {
@@ -772,6 +783,23 @@ textarea {
     min-width: 0;
 }
 
+.grid-column.client-column {
+    overflow: visible;
+}
+
+.grid-column.client-column .panel-card {
+    max-height: 100%;
+}
+
+.grid-column.client-column .card-body {
+    overflow: hidden;
+}
+
+.grid-column.client-column .list-scroll-area {
+    overflow-y: auto;
+    min-height: 0;
+}
+
 
 .panel-card {
     background: var(--bg-white);
@@ -790,19 +818,20 @@ textarea {
 }
 
 .card-header {
-    padding: 1.25rem 1.5rem;
+    padding: 1rem 1.25rem;
     border-bottom: 1px solid var(--border-color);
-    background: #fafafa;
+    background: linear-gradient(180deg, #fafafa 0%, #f5f7f9 100%);
 }
 
 .card-header h3 {
-    font-size: 1.1rem;
+    font-size: 0.95rem;
     font-weight: 600;
-    color: #1e293b;
+    color: #334155;
+    letter-spacing: -0.01em;
 }
 
 .card-body {
-    padding: 1.5rem 1.5rem 2.5rem 1.5rem;
+    padding: 1.25rem;
     flex: 1;
     overflow-y: auto;
     display: flex;
@@ -857,13 +886,25 @@ textarea {
 .modern-input,
 .modern-textarea {
     width: 100%;
-    padding: 0.85rem 1rem;
-    border: 1px solid var(--border-color);
+    padding: 0.75rem 1rem;
+    border: 1.5px solid #e2e8f0;
     border-radius: 10px;
     font-family: inherit;
-    font-size: 0.95rem;
-    transition: all 0.2s;
-    background-color: #f8fafc;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+    background-color: #fafbfc;
+    color: var(--text-main);
+}
+
+.modern-input::placeholder,
+.modern-textarea::placeholder {
+    color: #a0aec0;
+}
+
+.modern-input:hover,
+.modern-textarea:hover {
+    border-color: #cbd5e1;
+    background-color: #fff;
 }
 
 .modern-input:focus,
@@ -871,13 +912,13 @@ textarea {
     outline: none;
     border-color: var(--primary);
     background-color: white;
-    box-shadow: 0 0 0 3px var(--primary-light);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 .modern-textarea {
     resize: none;
     flex: 1;
-    flex: 1;
+    line-height: 1.5;
 }
 
 .full-height-input {
@@ -906,6 +947,7 @@ textarea {
     flex: 1;
     overflow-y: auto;
     padding: 0;
+    max-height: 45vh;
 }
 
 
@@ -934,11 +976,12 @@ textarea {
 
 
 .client-item {
-    padding: 1rem 1.25rem;
+    padding: 0.85rem 1.25rem;
     border-bottom: 1px solid var(--border-color);
     cursor: pointer;
-    transition: background 0.15s;
+    transition: all 0.15s ease;
     position: relative;
+    border-left: 3px solid transparent;
 }
 
 .client-item:last-child {
@@ -946,41 +989,77 @@ textarea {
 }
 
 .client-item:hover {
-    background-color: #f1f5f9;
+    background-color: #f8fafc;
+    border-left-color: #cbd5e1;
 }
 
 .client-item.selected {
-    background-color: #eff6ff;
-    background-color: #eff6ff;
-    border-left: 4px solid var(--primary);
+    background: linear-gradient(90deg, rgba(99, 102, 241, 0.08) 0%, rgba(99, 102, 241, 0.02) 100%);
+    border-left-color: var(--primary);
+}
+
+.client-item.selected:hover {
+    background: linear-gradient(90deg, rgba(99, 102, 241, 0.12) 0%, rgba(99, 102, 241, 0.04) 100%);
 }
 
 .client-name {
     font-weight: 600;
     color: var(--text-main);
-    font-size: 0.95rem;
-    margin-bottom: 2px;
+    font-size: 0.9rem;
+    margin-bottom: 3px;
+    line-height: 1.3;
 }
 
 .client-meta {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
+    font-size: 0.8rem;
+    color: #94a3b8;
+    line-height: 1.35;
 }
 
+#remembered-section {
+    margin-bottom: 0.5rem;
+}
+
+.remembered-label {
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.05) 100%);
+    color: #059669;
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px 6px 0 0;
+    font-weight: 600;
+}
+
+.remembered-list {
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.02) 100%);
+    border-radius: 0 0 6px 6px;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    border-top: none;
+}
+
+.remembered-list .client-item {
+    border-left-color: #10b981;
+}
+
+.remembered-list .client-item:hover {
+    background: rgba(16, 185, 129, 0.12);
+}
 
 .btn {
     border: none;
-    border-radius: 8px;
-    border-radius: 8px;
-    padding: 0.6rem 1.25rem;
+    border-radius: 10px;
+    padding: 0.65rem 1.25rem;
     font-weight: 600;
-    font-size: 0.9rem;
+    font-size: 0.875rem;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
+    outline: none;
+}
+
+.btn:focus {
+    outline: none;
 }
 
 .btn:active {
@@ -2190,4 +2269,114 @@ textarea {
     align-items: center;
     justify-content: center;
     height: 100px;
+}
+
+@media (max-height: 750px) {
+    .dashboard-grid {
+        padding: 0.75rem 1rem;
+        gap: 0.75rem;
+    }
+
+    .card-header {
+        padding: 0.75rem 1rem;
+    }
+
+    .card-header h3 {
+        font-size: 0.95rem;
+    }
+
+    .card-body {
+        padding: 0.75rem 1rem 1rem 1rem;
+    }
+
+    .form-group {
+        margin-bottom: 0.75rem;
+    }
+
+    .form-group label {
+        margin-bottom: 0.3rem;
+        font-size: 0.8rem;
+    }
+
+    .modern-input,
+    .modern-textarea {
+        padding: 0.6rem 0.75rem;
+        font-size: 0.9rem;
+    }
+
+    .call-header {
+        padding: 0.75rem 1.25rem;
+    }
+
+    .phone-number {
+        font-size: 1.25rem;
+    }
+
+    .custom-audio-player {
+        padding: 0.35rem 0.75rem;
+    }
+
+    .close-after-create-section {
+        margin-top: 0.5rem;
+    }
+
+    .close-options {
+        padding: 0.75rem;
+        margin-top: 0.5rem;
+    }
+
+    .form-footer {
+        padding-top: 0.5rem;
+    }
+
+    .btn-lg {
+        padding: 0.65rem 1.25rem;
+        font-size: 0.9rem;
+    }
+
+    .client-item {
+        padding: 0.75rem 1rem;
+    }
+
+    .search-box-container {
+        padding: 0.75rem 1rem;
+    }
+
+    .list-label-small {
+        padding: 0.5rem 1rem;
+        font-size: 0.7rem;
+    }
+}
+
+@media (max-height: 650px) {
+    .dashboard-grid {
+        padding: 0.5rem 0.75rem;
+        gap: 0.5rem;
+    }
+
+    .card-header {
+        padding: 0.5rem 0.75rem;
+    }
+
+    .card-body {
+        padding: 0.5rem 0.75rem 0.75rem 0.75rem;
+    }
+
+    .form-group {
+        margin-bottom: 0.5rem;
+    }
+
+    .modern-input,
+    .modern-textarea {
+        padding: 0.5rem 0.65rem;
+        font-size: 0.85rem;
+    }
+
+    .call-header {
+        padding: 0.5rem 1rem;
+    }
+
+    .close-options .form-group {
+        margin-bottom: 0.5rem;
+    }
 }

@@ -183,6 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastAudioRequestId = 0;
 
     let currentMode = 'incoming';
+    let visibleCalls = [];
     let bulkCalls = [];
     let bulkIndex = 0;
     let bulkStats = { total: 0, filled: 0, unfilled: 0 };
@@ -194,6 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const statTotal = document.getElementById('stat-total');
     const statFilled = document.getElementById('stat-filled');
     const statUnfilled = document.getElementById('stat-unfilled');
+    const statSkipped = document.getElementById('stat-skipped');
     const btnPrevCall = document.getElementById('btn-prev-call');
     const btnNextCall = document.getElementById('btn-next-call');
     const bulkPositionEl = document.getElementById('bulk-position');
@@ -243,6 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         applyAllFilters();
+        renderFilteredHistory();
     }
 
     if (durationSlider) {
@@ -271,6 +274,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (selectedDates && selectedDates.size > 0) {
                 const parsed = parseCallDate(c.date);
                 if (!parsed || !selectedDates.has(parsed.formatted)) return false;
+            }
+
+            if (currentHistoryFilter !== 'all') {
+                const status = c.status || 'unprocessed';
+                if (status !== currentHistoryFilter) return false;
             }
 
             return true;
@@ -318,17 +326,16 @@ document.addEventListener('DOMContentLoaded', () => {
             bulkIndex = 0;
         }
 
-        const stats = await window.api.getBulkStats();
-        bulkStats = stats;
-        updateBulkStats();
+        await loadHistory();
+        updateStatsFromHistory();
 
+        const statusMap = new Map();
+        callHistory.forEach(c => statusMap.set(c.id, c.status));
+        allBulkCalls.forEach(c => {
+            c.status = statusMap.get(c.id) || 'unprocessed';
+        });
 
-        if (bulkCalls.length > 0) {
-            showCallData(bulkCalls[0]);
-            updateBulkPosition();
-        } else {
-            showCallData(null);
-        }
+        applyAllFilters();
     }
 
     function exitBulkMode() {
@@ -345,6 +352,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (statTotal) statTotal.textContent = bulkStats.total;
         if (statFilled) statFilled.textContent = bulkStats.filled;
         if (statUnfilled) statUnfilled.textContent = bulkStats.unfilled;
+        if (statSkipped) statSkipped.textContent = bulkStats.skipped || 0;
+    }
+
+    function updateStatsFromHistory() {
+        const created = callHistory.filter(c => c.status === 'created').length;
+        const skipped = callHistory.filter(c => c.status === 'skipped').length;
+        const unprocessed = callHistory.filter(c => c.status === 'unprocessed').length;
+        bulkStats.filled = created;
+        bulkStats.skipped = skipped;
+        bulkStats.unfilled = unprocessed;
+        bulkStats.total = callHistory.length;
+        updateBulkStats();
     }
 
     if (window.api.onBulkProgress) {
@@ -442,7 +461,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function applyDateFilter() {
         applyAllFilters();
         updateDatePickerLabel();
-        console.log(`[CallWatcher] Фильтр: ${selectedDates.size} дат, ${bulkCalls.length} звонков`);
+        renderFilteredHistory();
     }
 
     function renderDateList() {
@@ -680,23 +699,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 }));
             }
 
-            if (data.associatedClient) {
-                const assoc = data.associatedClient;
-                const existingIdx = finalSuggestions.findIndex(s => (s.Id || s.id) === assoc.clientId);
+            const rememberedSection = document.getElementById('remembered-section');
+            const rememberedList = document.getElementById('remembered-list');
 
+            if (data.associatedClient && rememberedSection && rememberedList) {
+                const assoc = data.associatedClient;
+                rememberedSection.classList.remove('hidden');
+                rememberedList.innerHTML = '';
+
+                const li = document.createElement('li');
+                li.className = 'client-item';
+                li.dataset.id = assoc.clientId;
+                li.innerHTML = `
+                    <div class="client-name">${assoc.clientName || 'Сохранённый клиент'}</div>
+                    <div class="client-meta">ID: ${assoc.clientId}</div>
+                `;
+                li.addEventListener('click', () => {
+                    selectedClientId = assoc.clientId;
+                    selectedClientObject = { id: assoc.clientId, Id: assoc.clientId, _displayName: assoc.clientName };
+                    document.querySelectorAll('.client-item').forEach(el => el.classList.remove('selected'));
+                    li.classList.add('selected');
+                    validateCreateButton();
+                    saveDraft();
+                });
+                rememberedList.appendChild(li);
+
+                const existingIdx = finalSuggestions.findIndex(s => (s.Id || s.id) === assoc.clientId);
                 if (existingIdx >= 0) {
-                    const existing = finalSuggestions[existingIdx];
-                    existing._displayMeta = '★ ' + (existing._displayMeta || '');
                     finalSuggestions.splice(existingIdx, 1);
-                    finalSuggestions.unshift(existing);
-                } else {
-                    finalSuggestions.unshift({
-                        id: assoc.clientId,
-                        Id: assoc.clientId,
-                        _displayName: assoc.clientName || 'Запомненный клиент',
-                        _displayMeta: '★ Ранее выбранный'
-                    });
                 }
+            } else if (rememberedSection) {
+                rememberedSection.classList.add('hidden');
             }
 
 
@@ -719,7 +752,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
                 if (data.draft) {
-                    console.log('Восстановление черновика для звонка:', data.id);
                     ticketSubject.value = data.draft.subject || '';
                     ticketDesc.value = data.draft.description || '';
                     clientSearch.value = data.draft.searchQuery || '';
@@ -757,21 +789,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (closeTimeInput) {
                         closeTimeInput.value = data.draft.closeTime || '5';
                     }
-                } else if (data.associatedClient) {
-                    selectedClientId = data.associatedClient.clientId;
-                    selectedClientObject = finalSuggestions.find(s => (s.Id || s.id) === selectedClientId);
-                    selectedClientId = data.associatedClient.clientId;
-                    selectedClientObject = finalSuggestions.find(s => (s.Id || s.id) === selectedClientId);
-                    setTimeout(() => highlightSelectedClient(selectedClientId), 100);
-                    validateCreateButton();
-                    setTimeout(() => highlightSelectedClient(selectedClientId), 100);
                 } else {
                     ticketSubject.value = '';
                     ticketDesc.value = '';
                     clientSearch.value = '';
                     toggleSearchMode(false);
-                    selectedClientId = null;
-                    selectedClientObject = null;
                     selectedClientId = null;
                     selectedClientObject = null;
                     validateCreateButton();
@@ -1055,17 +1077,86 @@ document.addEventListener('DOMContentLoaded', () => {
                 btnCreate.classList.add('btn-success');
 
                 const completedCallId = currentCallData?.id;
+
+                const historyItem = callHistory.find(c => c.id === completedCallId);
+                if (historyItem) {
+                    historyItem.status = 'created';
+                }
+
                 setTimeout(() => {
-                    currentCallData = null;
-                    showCallData(null);
                     window.api.ticketCreated(completedCallId, result.TicketUrl);
                     btnCreate.textContent = 'Создать заявку';
+                    btnCreate.classList.remove('btn-success');
                     btnCreate.disabled = true;
+                    validateCreateButton();
+
+                    updateStatsFromHistory();
+                    renderFilteredHistory();
 
                     if (currentMode === 'bulk') {
-                        loadBulkCalls();
+                        const allIdx = allBulkCalls.findIndex(c => c.id === completedCallId);
+                        if (allIdx !== -1) allBulkCalls.splice(allIdx, 1);
+
+                        const idx = bulkCalls.findIndex(c => c.id === completedCallId);
+                        if (idx !== -1) {
+                            bulkCalls.splice(idx, 1);
+                        }
+
+                        bulkStats.filled++;
+                        bulkStats.unfilled--;
+                        updateBulkStats();
+
+                        while (bulkIndex < bulkCalls.length && bulkCalls[bulkIndex].status === 'skipped') {
+                            bulkIndex++;
+                        }
+
+                        if (bulkIndex >= bulkCalls.length) {
+                            const firstUnprocessed = bulkCalls.findIndex(c => c.status !== 'skipped');
+                            if (firstUnprocessed !== -1) {
+                                bulkIndex = firstUnprocessed;
+                            } else {
+                                bulkIndex = Math.max(0, bulkCalls.length - 1);
+                            }
+                        }
+
+                        updateBulkPosition();
+
+                        if (bulkCalls.length > 0) {
+                            showCallData(bulkCalls[bulkIndex]);
+                        } else {
+                            showCallData(null);
+                        }
                     } else {
-                        loadHistory();
+                        const historyItem = callHistory.find(c => c.id === completedCallId);
+                        if (historyItem) historyItem.status = 'created';
+
+                        renderFilteredHistory();
+
+                        const currentIndex = callHistory.findIndex(c => c.id === completedCallId);
+                        let nextCall = null;
+
+                        for (let i = currentIndex + 1; i < callHistory.length; i++) {
+                            if (callHistory[i].status === 'unprocessed') {
+                                nextCall = callHistory[i];
+                                break;
+                            }
+                        }
+
+                        if (!nextCall) {
+                            for (let i = 0; i < currentIndex; i++) {
+                                if (callHistory[i].status === 'unprocessed') {
+                                    nextCall = callHistory[i];
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (nextCall) {
+                            showCallData(nextCall);
+                            window.api.lockCall(nextCall.id);
+                        } else {
+                            showCallData(null);
+                        }
                     }
                 }, 1500);
             } else {
@@ -1082,13 +1173,50 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnSkip.addEventListener('click', () => {
         if (currentCallData && (currentCallData.status === 'skipped' || currentCallData.status === 'created')) return;
+
+        const skippedId = currentCallData?.id;
+
         if (currentCallData) {
             window.api.skipCall(currentCallData.id);
+
+            const historyItem = callHistory.find(c => c.id === skippedId);
+            if (historyItem) {
+                historyItem.status = 'skipped';
+            }
         }
+
         if (window.audioModule) {
             window.audioModule.hide();
         }
-        showCallData(null);
+
+        updateStatsFromHistory();
+        renderFilteredHistory();
+
+        const currentIndex = callHistory.findIndex(c => c.id === skippedId);
+        let nextCall = null;
+
+        for (let i = currentIndex + 1; i < callHistory.length; i++) {
+            if (callHistory[i].status === 'unprocessed') {
+                nextCall = callHistory[i];
+                break;
+            }
+        }
+
+        if (!nextCall) {
+            for (let i = 0; i < currentIndex; i++) {
+                if (callHistory[i].status === 'unprocessed') {
+                    nextCall = callHistory[i];
+                    break;
+                }
+            }
+        }
+
+        if (nextCall) {
+            showCallData(nextCall);
+            window.api.lockCall(nextCall.id);
+        } else {
+            showCallData(null);
+        }
     });
 
 
@@ -1102,14 +1230,16 @@ document.addEventListener('DOMContentLoaded', () => {
         tab.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            console.log('[CallWatcher] Клик по табу:', tab.dataset.filter);
             filterTabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
             currentHistoryFilter = tab.dataset.filter;
             renderFilteredHistory();
+
+            if (currentMode === 'bulk') {
+                applyAllFilters();
+            }
         });
     });
-    console.log('[CallWatcher] Инициализировано табов:', filterTabs.length);
 
 
     if (historySearchInput) {
@@ -1171,17 +1301,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let filtered = callHistory;
 
+        filtered = filtered.filter(c => {
+            const dur = parseInt(c.duration) || 0;
+            return dur >= minDuration;
+        });
+
+        if (selectedDates && selectedDates.size > 0) {
+            filtered = filtered.filter(c => {
+                const parsed = parseCallDate(c.date);
+                return parsed && selectedDates.has(parsed.formatted);
+            });
+        }
 
         if (currentHistoryFilter !== 'all') {
             filtered = filtered.filter(c => c.status === currentHistoryFilter);
         }
-
 
         if (historySearchQuery) {
             filtered = filtered.filter(c =>
                 (c.phone || '').toLowerCase().includes(historySearchQuery)
             );
         }
+
+        visibleCalls = filtered;
 
         if (filtered.length === 0) {
             historyList.innerHTML = '';
@@ -1286,6 +1428,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (callHistory.length === 0 && localHistory.length > 0) {
             callHistory = [...localHistory];
             renderFilteredHistory();
+            updateStatsFromHistory();
         }
 
 
@@ -1320,6 +1463,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         renderFilteredHistory();
+        updateStatsFromHistory();
     }
 
     function saveDraft() {
@@ -1386,12 +1530,10 @@ document.addEventListener('DOMContentLoaded', () => {
     initVersion();
 
     window.api.onUpdateAvailable((info) => {
-        console.log('Обновление доступно:', info);
         if (appVersionEl) appVersionEl.textContent = `Обновление... v${info.version}`;
     });
 
     window.api.onUpdateDownloaded((info) => {
-        console.log('Обновление загружено:', info);
         if (appVersionEl) {
             appVersionEl.textContent = `Перезапуск для v${info.version}`;
             appVersionEl.style.cursor = 'pointer';
@@ -1497,7 +1639,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return dur >= minDuration;
         });
         bulkFirstLoad = false;
-        console.log('Предзагружено звонков:', calls.length);
     });
 
     function escapeHtml(text) {

@@ -25,11 +25,16 @@ function loadHistory() {
 
 
             const uniqueHistoryMap = new Map();
+            let droppedCount = 0;
             history.forEach(item => {
                 if (item && item.id) {
                     uniqueHistoryMap.set(item.id, item);
+                } else {
+                    droppedCount++;
                 }
             });
+            if (droppedCount > 0) console.warn(`[CallWatcher] Отброшено ${droppedCount} записей без ID при загрузке`);
+
             history = Array.from(uniqueHistoryMap.values());
 
 
@@ -39,12 +44,14 @@ function loadHistory() {
             state.setCallHistory(history);
 
             const shownCallIds = state.getShownCallIds();
+            let skippedCount = 0;
             history.forEach(c => {
                 if (c.status === 'created' || c.status === 'skipped') {
                     shownCallIds.add(c.id);
                 }
+                if (c.status === 'skipped') skippedCount++;
             });
-            console.log('[CallWatcher] Загружено', history.length, 'звонков. Показано:', shownCallIds.size);
+            console.log(`[CallWatcher] Загружена история: ${history.length} записей. Из них пропущено: ${skippedCount}`);
         }
     } catch (e) {
         console.error('[CallWatcher] Ошибка загрузки истории:', e);
@@ -63,11 +70,28 @@ function saveHistory() {
                 history: callHistory
             }, null, 2);
             fs.writeFileSync(filePath, data, 'utf8');
-            console.log('[CallWatcher] История сохранена:', callHistory.length, 'звонков');
         } catch (e) {
             console.error('[CallWatcher] Ошибка сохранения истории:', e);
         }
     }, 1000);
+}
+
+function saveHistoryImmediate() {
+    clearTimeout(saveTimeout);
+    try {
+        const filePath = getHistoryFilePath();
+        const callHistory = state.getCallHistory();
+        const data = JSON.stringify({
+            version: 1,
+            savedAt: new Date().toISOString(),
+            history: callHistory
+        }, null, 2);
+        fs.writeFileSync(filePath, data, 'utf8');
+        const skippedCount = callHistory.filter(c => c.status === 'skipped').length;
+        console.log(`[CallWatcher] История сохранена мгновенно. Всего: ${callHistory.length}, Пропущено: ${skippedCount}`);
+    } catch (e) {
+        console.error('[CallWatcher] Ошибка сохранения истории (m):', e);
+    }
 }
 
 function addToHistory(callData, status) {
@@ -111,6 +135,7 @@ module.exports = {
     getHistoryFilePath,
     loadHistory,
     saveHistory,
+    saveHistoryImmediate,
     addToHistory,
     clearHistory
 };

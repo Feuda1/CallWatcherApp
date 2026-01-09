@@ -7,6 +7,7 @@ const history = require('./history');
 const calls = require('./calls');
 const topics = require('./topics');
 const tickets = require('./tickets');
+const associations = require('./associations');
 const windows = require('./windows');
 
 function setupIpcHandlers() {
@@ -46,7 +47,11 @@ function setupIpcHandlers() {
 
 
     ipcMain.handle('create-ticket', async (event, data) => {
-        return await tickets.createTicket(data);
+        const result = await tickets.createTicket(data);
+        if (result && !result.Error && result.IsValid && data.clientId && data.callData && data.callData.phone) {
+            associations.setAssociation(data.callData.phone, data.clientId, data.clientName);
+        }
+        return result;
     });
 
 
@@ -75,7 +80,6 @@ function setupIpcHandlers() {
             }
 
             const buffer = await response.arrayBuffer();
-            console.log(`[CallWatcher] Аудио получено: ${buffer.byteLength} байт`);
             return Buffer.from(buffer);
         } catch (e) {
             console.error('[CallWatcher] Ошибка аудио:', e.message);
@@ -115,11 +119,9 @@ function setupIpcHandlers() {
     });
 
     ipcMain.on('logout', async () => {
-        console.log('[CallWatcher] Выход из системы...');
         state.setIsLoggedIn(false);
         try {
             await session.defaultSession.clearStorageData({ storages: ['cookies', 'localstorage'] });
-            console.log('[CallWatcher] Данные сессии очищены');
         } catch (e) {
             console.error('[CallWatcher] Ошибка очистки данных:', e);
         }
@@ -136,18 +138,17 @@ function setupIpcHandlers() {
     ipcMain.on('lock-call', (event, callId) => {
         state.setIsCallLocked(true);
         state.setLockedCallId(callId);
-        console.log('[CallWatcher] Звонок заблокирован:', callId);
     });
 
     ipcMain.on('unlock-call', () => {
         state.setIsCallLocked(false);
         state.setLockedCallId(null);
-        console.log('[CallWatcher] Звонок разблокирован');
     });
 
 
     ipcMain.on('skip-call', (event, callId) => {
         windows.hideNotification();
+        console.log(`[CallWatcher] skip-call requested for ID: "${callId}"`);
 
         const callHistory = state.getCallHistory();
         const mainWindow = state.getMainWindow();
@@ -159,10 +160,23 @@ function setupIpcHandlers() {
             if (historyItem) {
                 historyItem.status = 'skipped';
                 historyItem.updatedAt = new Date().toLocaleString('ru-RU');
+                console.log(`[CallWatcher] Статус обновлен на skipped для ID: ${callId}`);
                 if (mainWindow && !mainWindow.isDestroyed()) {
                     mainWindow.webContents.send('call-history', callHistory);
                 }
-                history.saveHistory();
+                history.saveHistoryImmediate();
+            } else {
+                console.log(`[CallWatcher] Звонок ${callId} не найден в истории. Ищем в кэше bulkCalls...`);
+                const bulkCache = state.getBulkCallsCache();
+                const cachedCall = bulkCache.find(c => c.id === callId);
+
+                if (cachedCall) {
+                    console.log(`[CallWatcher] Звонок найден в кэше. Добавляем в историю как skipped.`);
+                    history.addToHistory(cachedCall, 'skipped');
+                    history.saveHistoryImmediate();
+                } else {
+                    console.log(`[CallWatcher] Звонок ${callId} не найден нигде.`);
+                }
             }
         }
 
@@ -171,17 +185,22 @@ function setupIpcHandlers() {
 
             const existing = callHistory.find(c => c.id === latestCallData.id);
             if (!existing) {
+                console.log(`[CallWatcher] Добавление нового звонка как skipped: ${latestCallData.id}`);
                 history.addToHistory(latestCallData, 'skipped');
+                history.saveHistoryImmediate();
             } else if (existing && existing.status !== 'created') {
+                console.log(`[CallWatcher] Обновление существующего (из latest) как skipped: ${existing.id}`);
                 existing.status = 'skipped';
-                history.saveHistory();
+                history.saveHistoryImmediate();
                 if (mainWindow && !mainWindow.isDestroyed()) {
                     mainWindow.webContents.send('call-history', callHistory);
                 }
             }
-
-            state.setLatestCallData(null);
+        } else {
+            if (!latestCallData) console.log('[CallWatcher] Нет latestCallData для пропуска');
         }
+
+        state.setLatestCallData(null);
 
         state.setNotifiedCallId(null);
         state.setIsCallLocked(false);
@@ -198,12 +217,26 @@ function setupIpcHandlers() {
             historyItem.status = 'created';
             historyItem.ticketUrl = ticketUrl;
             historyItem.updatedAt = new Date().toLocaleString('ru-RU');
+            console.log(`[CallWatcher] Статус обновлен на created для ID: ${callId}`);
         } else if (latestCallData && latestCallData.id === callId) {
             if (ticketUrl) latestCallData.ticketUrl = ticketUrl;
             history.addToHistory(latestCallData, 'created');
+            console.log(`[CallWatcher] Новый звонок (latest) добавлен как created: ${callId}`);
+        } else {
+            console.log(`[CallWatcher] Звонок ${callId} не найден в истории. Ищем в кэше bulkCalls...`);
+            const bulkCache = state.getBulkCallsCache();
+            const cachedCall = bulkCache.find(c => c.id === callId);
+
+            if (cachedCall) {
+                console.log(`[CallWatcher] Звонок найден в кэше. Добавляем в историю как created.`);
+                if (ticketUrl) cachedCall.ticketUrl = ticketUrl;
+                history.addToHistory(cachedCall, 'created');
+            } else {
+                console.log(`[CallWatcher] Звонок ${callId} не найден нигде для обновления статуса created.`);
+            }
         }
 
-        history.saveHistory();
+        history.saveHistoryImmediate();
 
         state.getShownCallIds().add(callId);
 

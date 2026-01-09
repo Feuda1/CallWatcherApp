@@ -179,6 +179,35 @@ const bulkMode = {
         } else {
             if (this.onShowCall) this.onShowCall(null);
         }
+    },
+
+    removeCall(callId) {
+        if (this.filtersModule && this.filtersModule.allBulkCalls) {
+            const allIdx = this.filtersModule.allBulkCalls.findIndex(c => c.id === callId);
+            if (allIdx !== -1) {
+                this.filtersModule.allBulkCalls.splice(allIdx, 1);
+            }
+        }
+
+        const idx = this.bulkCalls.findIndex(c => c.id === callId);
+        if (idx !== -1) {
+            this.bulkCalls.splice(idx, 1);
+            this.bulkStats.filled++;
+            this.bulkStats.unfilled--;
+            this.updateStats();
+
+            if (this.bulkIndex >= this.bulkCalls.length) {
+                this.bulkIndex = Math.max(0, this.bulkCalls.length - 1);
+            }
+
+            this.updatePosition();
+
+            if (this.bulkCalls.length > 0) {
+                this.showCurrentCall();
+            } else {
+                if (this.onShowCall) this.onShowCall(null);
+            }
+        }
     }
 };
 

@@ -122,7 +122,9 @@ function parseAllCallsFromPage(html) {
             }
         }
 
-        const hasTicket = blockHtml.includes('/Tickets/Details/') || blockHtml.includes('btn-success');
+        const ticketRowEnd = html.indexOf('</tr>', match.index);
+        const fullRowHtml = rowStart !== -1 && ticketRowEnd !== -1 ? html.slice(rowStart, ticketRowEnd + 5) : blockHtml;
+        const hasTicket = fullRowHtml.includes('table-success') || fullRowHtml.includes('bg-success');
         const audioUrl = linkedId ? `https://clients.denvic.ru/PhoneCalls/GetCallRecord?id=${linkedId}` : null;
 
         calls.push({
@@ -212,7 +214,7 @@ function parseAllCallsFromPage(html) {
             }
         }
 
-        const hasTicket = rowHtml.includes('/Tickets/Details/') || rowHtml.includes('btn-success');
+        const hasTicket = rowHtml.includes('table-success') || rowHtml.includes('bg-success');
 
         if (phone || date || linkedId) {
             const audioUrl = `https://clients.denvic.ru/PhoneCalls/GetCallRecord?id=${linkedId}`;
