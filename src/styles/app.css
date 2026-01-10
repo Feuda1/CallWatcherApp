@@ -1036,11 +1036,17 @@ textarea {
 }
 
 .remembered-list .client-item {
-    border-left-color: #10b981;
+    border-left-color: transparent;
 }
 
 .remembered-list .client-item:hover {
     background: rgba(16, 185, 129, 0.12);
+    border-left-color: rgba(16, 185, 129, 0.5);
+}
+
+.remembered-list .client-item.selected {
+    border-left-color: #10b981;
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.05) 100%);
 }
 
 .btn {
@@ -2379,4 +2385,58 @@ textarea {
     .close-options .form-group {
         margin-bottom: 0.5rem;
     }
+}
+
+.topic-input-wrapper {
+    position: relative;
+}
+
+.topics-container {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: var(--shadow-lg);
+    margin-top: 4px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.topics-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.topics-list li {
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    border-bottom: 1px solid var(--border-color);
+    transition: background 0.15s;
+}
+
+.topics-list li:last-child {
+    border-bottom: none;
+}
+
+.topics-list li:hover {
+    background: #f8fafc;
+}
+
+.topics-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.topics-container::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+
+.topics-container::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
 }

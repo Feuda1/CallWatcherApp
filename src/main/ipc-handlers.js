@@ -40,6 +40,10 @@ function setupIpcHandlers() {
     ipcMain.handle('get-topics', () => topics.getTopics());
     ipcMain.handle('save-topic', (event, topic) => topics.addTopic(topic));
 
+    ipcMain.handle('get-association', (event, phone) => {
+        return associations.getAssociation(phone);
+    });
+
 
     ipcMain.handle('search-clients', async (event, query) => {
         return await tickets.searchClients(query);

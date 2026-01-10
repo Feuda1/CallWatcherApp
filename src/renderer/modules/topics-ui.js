@@ -17,18 +17,27 @@ const topicsUI = {
 
     setupEventListeners() {
         if (this.ticketSubject) {
-            this.ticketSubject.addEventListener('focus', () => {
-                if (this.topicsList.length > 0) {
-                    this.show(this.topicsList);
+            this.ticketSubject.addEventListener('input', () => {
+                const query = this.ticketSubject.value.trim().toLowerCase();
+                if (query.length > 0 && this.topicsList.length > 0) {
+                    const filtered = this.topicsList.filter(t =>
+                        t.toLowerCase().includes(query)
+                    );
+                    if (filtered.length > 0) {
+                        this.show(filtered);
+                    } else {
+                        this.hide();
+                    }
+                } else {
+                    this.hide();
                 }
             });
         }
 
-
         document.addEventListener('click', (e) => {
             if (this.ticketSubject && this.topicsContainer) {
                 if (!this.ticketSubject.contains(e.target) && !this.topicsContainer.contains(e.target)) {
-                    this.topicsContainer.classList.add('hidden');
+                    this.hide();
                 }
             }
         });
@@ -54,16 +63,20 @@ const topicsUI = {
             item.addEventListener('click', () => {
                 if (this.ticketSubject) {
                     this.ticketSubject.value = topic;
-                    this.topicsContainer.classList.add('hidden');
-
-
-                    this.ticketSubject.dispatchEvent(new Event('input'));
+                    this.hide();
+                    this.ticketSubject.dispatchEvent(new Event('input', { bubbles: true }));
                 }
             });
             this.topicList.appendChild(item);
         });
 
         this.topicsContainer.classList.remove('hidden');
+    },
+
+    hide() {
+        if (this.topicsContainer) {
+            this.topicsContainer.classList.add('hidden');
+        }
     },
 
     async save(topic) {

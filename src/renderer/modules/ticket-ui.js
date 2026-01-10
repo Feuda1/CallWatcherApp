@@ -209,10 +209,10 @@ const ticketUI = {
         filtered.forEach(reason => {
             const isSelected = this.selectedReasonIds.has(reason.value);
             const option = document.createElement('div');
-            option.className = 'custom-select-option' + (isSelected ? ' selected' : '');
+            option.className = 'option-item' + (isSelected ? ' selected' : '');
             option.innerHTML = `
-                <span class="option-checkbox">${isSelected ? '✓' : ''}</span>
-                <span class="option-text">${reason.text}</span>
+                <div class="option-check">${isSelected ? '✓' : ''}</div>
+                <span>${reason.text}</span>
             `;
             option.addEventListener('click', (e) => {
                 e.stopPropagation();

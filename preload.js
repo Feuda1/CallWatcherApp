@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('api', {
     createTicket: (data) => ipcRenderer.invoke('create-ticket', data),
     getTopics: () => ipcRenderer.invoke('get-topics'),
     saveTopic: (topic) => ipcRenderer.invoke('save-topic', topic),
+    getAssociation: (phone) => ipcRenderer.invoke('get-association', phone),
 
 
     getAllCalls: (forceRefresh) => ipcRenderer.invoke('get-all-calls', forceRefresh),
