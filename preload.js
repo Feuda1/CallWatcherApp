@@ -27,7 +27,6 @@ contextBridge.exposeInMainWorld('api', {
     lockCall: (callId) => ipcRenderer.send('lock-call', callId),
     unlockCall: () => ipcRenderer.send('unlock-call'),
     updateCallDraft: (callId, draft) => ipcRenderer.send('update-call-draft', callId, draft),
-    testNotification: () => ipcRenderer.send('test-notification'),
 
 
     onCallData: (callback) => ipcRenderer.on('call-data', (event, data) => callback(data)),

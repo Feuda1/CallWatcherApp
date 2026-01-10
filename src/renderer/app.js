@@ -366,6 +366,17 @@ document.addEventListener('DOMContentLoaded', () => {
         updateBulkStats();
     }
 
+    function findNextUnprocessedCall(currentId) {
+        const currentIndex = callHistory.findIndex(c => c.id === currentId);
+        for (let i = currentIndex + 1; i < callHistory.length; i++) {
+            if (callHistory[i].status === 'unprocessed') return callHistory[i];
+        }
+        for (let i = 0; i < currentIndex; i++) {
+            if (callHistory[i].status === 'unprocessed') return callHistory[i];
+        }
+        return null;
+    }
+
     if (window.api.onBulkProgress) {
         window.api.onBulkProgress((count) => {
             if (statTotal) statTotal.textContent = count;
@@ -635,8 +646,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         audioTimeCurrent.textContent = '0:00';
                         audioTimeTotal.textContent = '0:00';
 
-                        audioTimeTotal.textContent = '0:00';
-
                         if (playBtnWrapper) playBtnWrapper.classList.add('loading');
 
                         const currentRequestId = ++lastAudioRequestId;
@@ -759,9 +768,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (data.draft.selectedClientId && data.draft.selectedClientObject) {
                         selectedClientId = data.draft.selectedClientId;
                         selectedClientObject = data.draft.selectedClientObject;
-                        selectedClientObject = data.draft.selectedClientObject;
                         setTimeout(() => highlightSelectedClient(selectedClientId), 100);
-                    } else {
                     }
 
                     validateCreateButton();
@@ -1004,7 +1011,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.querySelectorAll('.client-item').forEach(el => el.classList.remove('selected'));
         element.classList.add('selected');
-        element.classList.add('selected');
         validateCreateButton();
 
         saveDraft();
@@ -1132,25 +1138,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         renderFilteredHistory();
 
-                        const currentIndex = callHistory.findIndex(c => c.id === completedCallId);
-                        let nextCall = null;
-
-                        for (let i = currentIndex + 1; i < callHistory.length; i++) {
-                            if (callHistory[i].status === 'unprocessed') {
-                                nextCall = callHistory[i];
-                                break;
-                            }
-                        }
-
-                        if (!nextCall) {
-                            for (let i = 0; i < currentIndex; i++) {
-                                if (callHistory[i].status === 'unprocessed') {
-                                    nextCall = callHistory[i];
-                                    break;
-                                }
-                            }
-                        }
-
+                        const nextCall = findNextUnprocessedCall(completedCallId);
                         if (nextCall) {
                             showCallData(nextCall);
                             window.api.lockCall(nextCall.id);
@@ -1192,25 +1180,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateStatsFromHistory();
         renderFilteredHistory();
 
-        const currentIndex = callHistory.findIndex(c => c.id === skippedId);
-        let nextCall = null;
-
-        for (let i = currentIndex + 1; i < callHistory.length; i++) {
-            if (callHistory[i].status === 'unprocessed') {
-                nextCall = callHistory[i];
-                break;
-            }
-        }
-
-        if (!nextCall) {
-            for (let i = 0; i < currentIndex; i++) {
-                if (callHistory[i].status === 'unprocessed') {
-                    nextCall = callHistory[i];
-                    break;
-                }
-            }
-        }
-
+        const nextCall = findNextUnprocessedCall(skippedId);
         if (nextCall) {
             showCallData(nextCall);
             window.api.lockCall(nextCall.id);

@@ -278,16 +278,6 @@ function setupIpcHandlers() {
     });
 
 
-    ipcMain.on('test-notification', () => {
-        const testData = {
-            id: 'test-' + Date.now(),
-            phone: '79991234567',
-            date: new Date().toLocaleString('ru-RU'),
-            duration: '30',
-            suggestions: [{ id: '1', name: 'Тестовый клиент' }]
-        };
-        windows.showNotification(testData);
-    });
 
 
     ipcMain.on('restart_app', () => {

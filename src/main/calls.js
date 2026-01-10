@@ -252,9 +252,7 @@ async function fetchAllCalls(forceRefresh = false, emitProgress = true) {
     const fetchPromise = (async () => {
         const ses = session.defaultSession;
         const allCalls = [];
-        let page = 1;
         const MAX_PAGES = 20;
-        let hasMore = true;
 
         try {
             const BATCH_SIZE = 5;
@@ -380,12 +378,11 @@ async function restoreHistoryFromServer() {
             if (mainWindow && !mainWindow.isDestroyed()) {
                 mainWindow.webContents.send('call-history', state.getCallHistory());
             }
-        } else {
-        }
 
-        state.getCallHistory().forEach(c => {
-            if (c.id) shownCallIds.add(c.id);
-        });
+            state.getCallHistory().forEach(c => {
+                if (c.id) shownCallIds.add(c.id);
+            });
+        }
 
     } catch (e) {
         console.error('[CallWatcher] Ошибка восстановления истории:', e);
@@ -526,7 +523,6 @@ async function checkCalls() {
                     windows.showNotification(callData);
                     shownCallIds.add(callData.id);
                 }
-            } else {
             }
         } else {
             if (!isCallLocked) {
