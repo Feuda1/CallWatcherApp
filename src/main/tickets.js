@@ -227,7 +227,7 @@ async function getTicketReasons() {
         }
 
         if (reasons.length > 0) {
-
+            console.log(`[CallWatcher] Загружено причин с сервера: ${reasons.length}`);
             state.setCachedReasons(reasons);
             return reasons;
         } else {

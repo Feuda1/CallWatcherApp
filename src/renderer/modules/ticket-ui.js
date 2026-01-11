@@ -47,6 +47,7 @@ const ticketUI = {
         this.customSelectList = document.getElementById('close-reason-list');
 
         this.setupEventListeners();
+        this.ensureReasonsLoaded();
     },
 
     setupEventListeners() {
@@ -139,20 +140,31 @@ const ticketUI = {
         }
     },
 
+    loadingPromise: null,
+
     async ensureReasonsLoaded() {
-        if (this.reasonsLoaded || this.isLoadingReasons) return;
+        if (this.reasonsLoaded) return;
+        if (this.loadingPromise) {
+            return this.loadingPromise;
+        }
 
         this.isLoadingReasons = true;
-        try {
-            const reasons = await window.api.getTicketReasons();
-            this.allTicketReasons = reasons || [];
-            this.reasonsLoaded = true;
-            this.renderOptions(this.allTicketReasons);
-        } catch (e) {
-            console.error('Ошибка загрузки причин:', e);
-        } finally {
-            this.isLoadingReasons = false;
-        }
+
+        this.loadingPromise = (async () => {
+            try {
+                const reasons = await window.api.getTicketReasons();
+                this.allTicketReasons = reasons || [];
+                this.reasonsLoaded = true;
+                this.renderOptions(this.allTicketReasons);
+            } catch (e) {
+                console.error('[TicketUI] Ошибка загрузки причин:', e);
+            } finally {
+                this.isLoadingReasons = false;
+                this.loadingPromise = null;
+            }
+        })();
+
+        return this.loadingPromise;
     },
 
     updateCustomSelectUI() {
@@ -267,6 +279,26 @@ const ticketUI = {
         if (this.closeCommentInput) this.closeCommentInput.value = '';
         if (this.closeTimeInput) this.closeTimeInput.value = '5';
         this.updateCustomSelectUI();
+    },
+
+    selectReasons(ids) {
+        if (!Array.isArray(ids)) return;
+        this.selectedReasonIds.clear();
+        ids.forEach(id => {
+            if (id) this.selectedReasonIds.add(String(id));
+        });
+        this.updateCustomSelectUI();
+        this.renderOptions(this.allTicketReasons);
+        this.validate();
+    },
+
+    selectReason(id) {
+        if (!id) return;
+        this.selectReasons([id]);
+    },
+
+    getAvailableReasons() {
+        return this.allTicketReasons || [];
     }
 };
 

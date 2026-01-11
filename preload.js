@@ -47,5 +47,12 @@ contextBridge.exposeInMainWorld('api', {
     openTicketInBrowser: (callData, clientId) => ipcRenderer.send('open-ticket-browser', callData, clientId),
 
     getTicketReasons: () => ipcRenderer.invoke('get-ticket-reasons'),
-    closeTicket: (data) => ipcRenderer.invoke('close-ticket', data)
+    closeTicket: (data) => ipcRenderer.invoke('close-ticket', data),
+
+    getApiKey: (service) => ipcRenderer.invoke('get-api-key', service),
+    setApiKey: (service, key) => ipcRenderer.invoke('set-api-key', service, key),
+    getSetting: (key) => ipcRenderer.invoke('get-setting', key),
+    setSetting: (key, value) => ipcRenderer.invoke('set-setting', key, value),
+    transcribeAudio: (audioBuffer, reasons) => ipcRenderer.invoke('transcribe-audio', audioBuffer, reasons),
+    log: (message) => ipcRenderer.send('renderer-log', message)
 });

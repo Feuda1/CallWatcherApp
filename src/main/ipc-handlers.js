@@ -9,8 +9,13 @@ const topics = require('./topics');
 const tickets = require('./tickets');
 const associations = require('./associations');
 const windows = require('./windows');
+const settings = require('./settings');
+const ai = require('./ai');
 
 function setupIpcHandlers() {
+    ipcMain.on('renderer-log', (event, message) => {
+        console.log(`[Renderer] ${message}`);
+    });
 
     ipcMain.handle('get-call-data', () => state.getLatestCallData());
     ipcMain.handle('get-call-history', () => state.getCallHistory());
@@ -201,7 +206,6 @@ function setupIpcHandlers() {
         state.setLockedCallId(null);
     });
 
-
     ipcMain.on('ticket-created', (event, callId, ticketUrl) => {
         const callHistory = state.getCallHistory();
         const historyItem = callHistory.find(c => c.id === callId);
@@ -332,6 +336,36 @@ function setupUpdaterEvents() {
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('update-error', err.message);
         }
+    });
+
+    ipcMain.handle('get-api-key', (event, service) => {
+        return settings.getApiKey(service);
+    });
+
+    ipcMain.handle('set-api-key', (event, service, apiKey) => {
+        settings.setApiKey(service, apiKey);
+        return true;
+    });
+
+    ipcMain.handle('transcribe-audio', async (event, audioBuffer, reasons) => {
+        try {
+            const apiKey = settings.getSetting('openai_api_key');
+            if (!apiKey) throw new Error('OpenAI API key not found');
+
+            return await ai.processAudioForTicket(audioBuffer, reasons);
+        } catch (error) {
+            console.error('Transcription error:', error);
+            throw error;
+        }
+    });
+
+    ipcMain.handle('get-setting', (event, key) => {
+        return settings.getSetting(key);
+    });
+
+    ipcMain.handle('set-setting', (event, key, value) => {
+        settings.setSetting(key, value);
+        return true;
     });
 }
 

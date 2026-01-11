@@ -66,6 +66,206 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    const settingsModal = document.getElementById('settings-modal');
+    const btnSettings = document.getElementById('btn-settings');
+    const btnCloseSettings = document.getElementById('close-settings');
+    const btnSaveSettings = document.getElementById('save-settings');
+    const openaiKeyInput = document.getElementById('openai-api-key');
+    const deepseekKeyInput = document.getElementById('deepseek-api-key');
+    const proxyUrlInput = document.getElementById('proxy-url');
+
+    const checkSubject = document.getElementById('ai-fill-subject');
+    const checkDescription = document.getElementById('ai-fill-description');
+    const checkReason = document.getElementById('ai-fill-reason');
+    const checkComment = document.getElementById('ai-fill-comment');
+
+    const modalOverlay = settingsModal?.querySelector('.modal-overlay');
+
+    async function loadSettingsToModal() {
+        const openaiApiKey = await window.api.getSetting('openai_api_key');
+        const deepseekApiKey = await window.api.getSetting('deepseek_api_key');
+        const proxyUrl = await window.api.getSetting('proxy_url');
+
+        if (openaiKeyInput) openaiKeyInput.value = openaiApiKey || '';
+        if (deepseekKeyInput) deepseekKeyInput.value = deepseekApiKey || '';
+
+        document.getElementById('proxy-host').value = '';
+        document.getElementById('proxy-port').value = '';
+        document.getElementById('proxy-user').value = '';
+        document.getElementById('proxy-password').value = '';
+
+        if (proxyUrl) {
+            try {
+                let cleanUrl = proxyUrl.replace(/^https?:\/\//, '');
+
+                let authPart = '';
+                let hostPart = cleanUrl;
+
+                if (cleanUrl.includes('@')) {
+                    const parts = cleanUrl.split('@');
+                    authPart = parts[0];
+                    hostPart = parts[1];
+                }
+
+                if (hostPart) {
+                    const [h, p] = hostPart.split(':');
+                    document.getElementById('proxy-host').value = h || '';
+                    document.getElementById('proxy-port').value = p || '';
+                }
+
+                if (authPart) {
+                    const [u, pass] = authPart.split(':');
+                    document.getElementById('proxy-user').value = u || '';
+                    document.getElementById('proxy-password').value = pass || '';
+                }
+
+            } catch (e) {
+                console.error("Error parsing proxy URL for UI:", e);
+                document.getElementById('proxy-host').value = proxyUrl;
+            }
+        }
+        const fillSubject = await window.api.getSetting('ai_fill_subject');
+        const fillDescription = await window.api.getSetting('ai_fill_description');
+        const fillReason = await window.api.getSetting('ai_fill_reason');
+        const fillComment = await window.api.getSetting('ai_fill_comment');
+
+        if (checkSubject) checkSubject.checked = fillSubject === true;
+        if (checkDescription) checkDescription.checked = fillDescription === true;
+        if (checkReason) checkReason.checked = fillReason === true;
+        if (checkComment) checkComment.checked = fillComment === true;
+
+        settingsModal?.classList.remove('hidden');
+    }
+
+    btnSettings?.addEventListener('click', async () => {
+        await loadSettingsToModal();
+    });
+
+    btnCloseSettings?.addEventListener('click', () => settingsModal?.classList.add('hidden'));
+    modalOverlay?.addEventListener('click', () => settingsModal?.classList.add('hidden'));
+
+    btnSaveSettings?.addEventListener('click', async () => {
+        const openaiKey = openaiKeyInput?.value?.trim() || '';
+        const deepseekKey = deepseekKeyInput?.value?.trim() || '';
+        const proxyHost = document.getElementById('proxy-host').value.trim();
+        const proxyPort = document.getElementById('proxy-port').value.trim();
+        const proxyUser = document.getElementById('proxy-user').value.trim();
+        const proxyPassword = document.getElementById('proxy-password').value.trim();
+
+        let proxyUrl = '';
+        if (proxyHost && proxyPort) {
+            if (proxyUser && proxyPassword) {
+                proxyUrl = `${proxyUser}:${proxyPassword}@${proxyHost}:${proxyPort}`;
+            } else {
+                proxyUrl = `${proxyHost}:${proxyPort}`;
+            }
+        }
+
+        await window.api.setApiKey('openai', openaiKey);
+        await window.api.setApiKey('deepseek', deepseekKey);
+        await window.api.setSetting('proxy_url', proxyUrl);
+
+        await window.api.setSetting('ai_fill_subject', checkSubject?.checked || false);
+        await window.api.setSetting('ai_fill_description', checkDescription?.checked || false);
+        await window.api.setSetting('ai_fill_reason', checkReason?.checked || false);
+        await window.api.setSetting('ai_fill_comment', checkComment?.checked || false);
+
+        settingsModal?.classList.add('hidden');
+        updateAiButtonVisibility();
+    });
+
+    const btnAiTranscribe = document.getElementById('btn-ai-transcribe');
+
+    async function updateAiButtonVisibility() {
+        const key = await window.api.getApiKey('openai');
+
+        const fillSubject = await window.api.getSetting('ai_fill_subject');
+        const fillDescription = await window.api.getSetting('ai_fill_description');
+        const fillReason = await window.api.getSetting('ai_fill_reason');
+        const fillComment = await window.api.getSetting('ai_fill_comment');
+
+        const anyFeatureEnabled = (fillSubject === true) || (fillDescription === true) || (fillReason === true) || (fillComment === true);
+
+        if (btnAiTranscribe) {
+            btnAiTranscribe.style.display = (key && anyFeatureEnabled) ? 'inline-flex' : 'none';
+        }
+    }
+    updateAiButtonVisibility();
+
+    btnAiTranscribe?.addEventListener('click', async () => {
+        if (!currentCallData?.audioUrl) {
+            alert('Нет аудио для транскрипции');
+            return;
+        }
+
+        btnAiTranscribe.disabled = true;
+        btnAiTranscribe.classList.add('loading');
+        btnAiTranscribe.textContent = '⏳ ...';
+
+        try {
+            const audioData = await window.api.getAudio(currentCallData.audioUrl);
+            if (!audioData || !audioData.buffer) {
+                throw new Error('Не удалось загрузить аудио');
+            }
+
+            let reasons = [];
+            if (window.ticketUIModule) {
+                if (typeof window.ticketUIModule.ensureReasonsLoaded === 'function') {
+                    await window.ticketUIModule.ensureReasonsLoaded();
+                }
+                if (typeof window.ticketUIModule.getAvailableReasons === 'function') {
+                    const allReasons = window.ticketUIModule.getAvailableReasons();
+                    if (Array.isArray(allReasons)) {
+                        reasons = allReasons.map(r => ({ id: r.value, name: r.text }));
+                    }
+                } else {
+                    console.warn('[App] ticketUIModule.getAvailableReasons is not a function');
+                }
+            } else {
+                console.error('[App] ticketUIModule not found');
+            }
+
+            const result = await window.api.transcribeAudio(audioData.buffer, reasons);
+
+            if (result.success) {
+                const fillSubject = await window.api.getSetting('ai_fill_subject');
+                const fillDescription = await window.api.getSetting('ai_fill_description');
+                const fillReason = await window.api.getSetting('ai_fill_reason');
+                const fillComment = await window.api.getSetting('ai_fill_comment');
+
+                if (fillSubject !== false && ticketSubject && result.subject) {
+                    ticketSubject.value = result.subject;
+                }
+                if (fillDescription !== false && ticketDesc && result.description) {
+                    ticketDesc.value = result.description;
+                }
+                if (fillReason !== false && window.ticketUIModule) {
+                    if (result.reasonIds && Array.isArray(result.reasonIds)) {
+                        window.ticketUIModule.selectReasons(result.reasonIds);
+                    } else if (result.reasonId) {
+                        window.ticketUIModule.selectReasons([String(result.reasonId)]);
+                    }
+                }
+
+                const closeComment = document.getElementById('close-comment');
+                if (fillComment !== false && closeComment && result.closeComment) {
+                    closeComment.value = result.closeComment;
+                }
+                window.ticketUIModule?.validate();
+            } else {
+                alert('Ошибка: ' + (result.error || 'Неизвестная ошибка'));
+            }
+
+        } catch (e) {
+            console.error('AI error:', e);
+            alert('Ошибка AI: ' + e.message);
+        } finally {
+            btnAiTranscribe.disabled = false;
+            btnAiTranscribe.classList.remove('loading');
+            btnAiTranscribe.textContent = '✨ AI';
+        }
+    });
+
     modeTabs.forEach(tab => {
         tab.addEventListener('click', () => {
             const mode = tab.dataset.mode;

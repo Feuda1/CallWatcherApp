@@ -14,8 +14,10 @@ const topics = require('./src/main/topics');
 const auth = require('./src/main/auth');
 const calls = require('./src/main/calls');
 const ipcHandlers = require('./src/main/ipc-handlers');
+const settings = require('./src/main/settings');
 
 app.whenReady().then(() => {
+    settings.loadSettings();
     history.loadHistory();
     associations.loadAssociations();
     topics.loadTopics();
