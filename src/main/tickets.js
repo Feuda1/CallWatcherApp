@@ -247,27 +247,7 @@ async function closeTicket(params) {
         let { ticketId, reasonId, reasonIds, comment, timeSpent } = params;
         console.log('[CallWatcher] Закрытие заявки:', ticketId);
 
-        if (reasonIds && Array.isArray(reasonIds) && reasonIds.length > 0) {
-            if (reasonIds.length === 1) {
-                reasonId = reasonIds[0];
-            } else {
-                const reasonsList = state.getCachedReasons() || state.FALLBACK_REASONS;
-                const selectedTexts = [];
 
-                reasonIds.forEach(id => {
-                    const r = reasonsList.find(x => x.value == id);
-                    if (r) selectedTexts.push(typeof r.text === 'string' ? r.text : id);
-                    else selectedTexts.push(id);
-                });
-
-                const namesStr = selectedTexts.join(', ');
-                if (namesStr) {
-                    const prefix = `[Причины: ${namesStr}]`;
-                    comment = comment ? `${prefix}\n${comment}` : prefix;
-                }
-                reasonId = reasonIds[0];
-            }
-        }
 
 
         const ses = session.defaultSession;

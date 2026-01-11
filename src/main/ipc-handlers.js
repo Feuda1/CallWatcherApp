@@ -96,6 +96,21 @@ function setupIpcHandlers() {
         }
     });
 
+    ipcMain.handle('download-audio', async (event, url, filename) => {
+        try {
+            const ses = session.defaultSession;
+            const response = await ses.fetch(url, { credentials: 'include' });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const buffer = await response.arrayBuffer();
+            const savePath = require('path').join(app.getPath('downloads'), filename || 'audio.mp3');
+            require('fs').writeFileSync(savePath, Buffer.from(buffer));
+            return { success: true, path: savePath };
+        } catch (e) {
+            console.error('Download error:', e);
+            return { success: false, error: e.message };
+        }
+    });
+
 
     ipcMain.on('window-minimize', () => {
         const mainWindow = state.getMainWindow();

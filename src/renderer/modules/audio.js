@@ -31,6 +31,38 @@ const audio = {
     },
 
     setupEventListeners() {
+
+        this.audioDownloadBtn = document.getElementById('audio-download-btn');
+        if (this.audioDownloadBtn) {
+            this.audioDownloadBtn.addEventListener('click', async () => {
+                if (!this.callAudio || !this.callAudio.dataset.originUrl) return;
+
+                const url = this.callAudio.dataset.originUrl;
+                const filename = this.callAudio.dataset.filename;
+
+                this.audioDownloadBtn.disabled = true;
+                this.audioDownloadBtn.classList.add('loading');
+                const spinner = this.audioDownloadBtn.querySelector('.spinner-ring-small');
+                if (spinner) spinner.classList.remove('hidden');
+
+                try {
+                    const result = await window.api.downloadAudio(url, filename);
+                    if (result && result.success) {
+                    } else {
+                        console.error('Download failed:', result.error);
+                        alert('Ошибка скачивания: ' + (result.error || 'Unknown error'));
+                    }
+                } catch (e) {
+                    console.error('Download exception:', e);
+                    alert('Ошибка скачивания: ' + e.message);
+                } finally {
+                    this.audioDownloadBtn.disabled = false;
+                    this.audioDownloadBtn.classList.remove('loading');
+                    if (spinner) spinner.classList.add('hidden');
+                }
+            });
+        }
+
         if (this.audioPlayBtn && this.callAudio) {
             this.audioPlayBtn.addEventListener('click', () => {
                 if (this.callAudio.paused) {
@@ -85,8 +117,10 @@ const audio = {
         }
     },
 
-    async loadAudio(audioUrl) {
+    async loadAudio(audioUrl, suggestedFilename) {
         if (!this.callAudio || !this.audioPlayerContainer) return;
+
+        this.audioDownloadBtn = document.getElementById('audio-download-btn');
 
         if (!audioUrl) {
             this.hide();
@@ -99,12 +133,20 @@ const audio = {
         if (currentDatasetUrl === audioUrl) return;
 
         this.callAudio.dataset.originUrl = audioUrl;
+        if (suggestedFilename) {
+            this.callAudio.dataset.filename = suggestedFilename;
+        }
+
         this.callAudio.pause();
         this.callAudio.src = '';
         this.audioPlayBtn?.classList.remove('playing');
         this.audioProgress.value = 0;
         this.audioTimeCurrent.textContent = '0:00';
         this.audioTimeTotal.textContent = '0:00';
+
+        if (this.audioDownloadBtn) {
+            this.audioDownloadBtn.disabled = true;
+        }
 
         const playBtnWrapper = document.querySelector('.play-btn-wrapper');
         if (playBtnWrapper) playBtnWrapper.classList.add('loading');
@@ -127,6 +169,7 @@ const audio = {
                 this.audioTimeTotal.textContent = 'Недоступно';
                 this.audioPlayBtn.disabled = true;
                 this.audioPlayBtn.title = `Запись недоступна: ${result.error}`;
+                if (this.audioDownloadBtn) this.audioDownloadBtn.disabled = true;
                 return;
             }
 
@@ -134,11 +177,14 @@ const audio = {
                 this.audioPlayerContainer.classList.remove('audio-error');
                 this.audioPlayBtn.disabled = false;
                 this.audioPlayBtn.title = '';
+                if (this.audioDownloadBtn) this.audioDownloadBtn.disabled = false;
+
                 const blob = new Blob([result], { type: 'audio/mpeg' });
                 this.callAudio.src = URL.createObjectURL(blob);
             } else {
                 console.error('Аудио буфер пуст');
                 this.audioTimeTotal.textContent = 'Ошибка';
+                if (this.audioDownloadBtn) this.audioDownloadBtn.disabled = true;
             }
         } catch (err) {
             if (currentRequestId !== this.lastAudioRequestId) return;
@@ -146,6 +192,7 @@ const audio = {
             if (playBtnWrapper) playBtnWrapper.classList.remove('loading');
             console.error('Ошибка получения аудио:', err);
             this.audioTimeTotal.textContent = 'Ошибка';
+            if (this.audioDownloadBtn) this.audioDownloadBtn.disabled = true;
         }
     },
 

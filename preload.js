@@ -54,5 +54,6 @@ contextBridge.exposeInMainWorld('api', {
     getSetting: (key) => ipcRenderer.invoke('get-setting', key),
     setSetting: (key, value) => ipcRenderer.invoke('set-setting', key, value),
     transcribeAudio: (audioBuffer, reasons) => ipcRenderer.invoke('transcribe-audio', audioBuffer, reasons),
+    downloadAudio: (url, filename) => ipcRenderer.invoke('download-audio', url, filename),
     log: (message) => ipcRenderer.send('renderer-log', message)
 });

@@ -45,6 +45,7 @@
     </div>
 
     <div class="app-layout">
+        <div class="bg-decoration"></div>
 
         <aside class="sidebar">
             <div class="sidebar-header">
@@ -212,8 +213,7 @@
                     </div>
                     <div class="header-actions">
                         <span id="call-date" class="date-badge">...</span>
-                        <button id="btn-open-browser" class="btn btn-secondary text-sm"
-                            title="Открыть страницу создания заявки в браузере (обход ограничения 3 дней)">🌐 В
+                        <button id="btn-open-browser" class="btn btn-secondary text-sm">🌐 В
                             браузере</button>
                         <button id="btn-skip" class="btn btn-secondary text-sm">Пропустить</button>
                     </div>
@@ -231,6 +231,8 @@
                         </button>
                     </div>
 
+
+
                     <div class="audio-progress-container">
                         <span id="audio-time-current" class="audio-time">0:00</span>
                         <input type="range" id="audio-progress" class="audio-slider" min="0" max="100" value="0">
@@ -242,6 +244,16 @@
                         <button class="btn-speed" data-speed="1.5">1.5x</button>
                         <button class="btn-speed" data-speed="2">2x</button>
                     </div>
+
+                    <button id="audio-download-btn" class="download-btn" title="Скачать запись" disabled>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        <div class="spinner-ring-small hidden"></div>
+                    </button>
                 </div>
 
                 <div class="dashboard-grid">

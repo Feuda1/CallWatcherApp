@@ -359,7 +359,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!audioUrl && data.id) {
                 audioUrl = `https://clients.denvic.ru/PhoneCalls/GetCallRecord?id=${data.id}`;
             }
-            window.audioModule?.loadAudio(audioUrl);
+
+            const safeDate = (data.date || '').replace(/:/g, '-').replace(/\//g, '-');
+            const filename = `Call_${data.phone || 'Unknown'}_${safeDate}.mp3`;
+            window.audioModule?.loadAudio(audioUrl, filename);
 
             let finalSuggestions = [];
             if (data.suggestions && data.suggestions.length > 0) {
